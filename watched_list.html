@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Annict API Fetcher</title>
+    <style>
+        #loading-popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <h1>Annict 活動データ取得ツール</h1>
+
+    <form id="data-form">
+        <label for="username">Username:(@から始まるアルファベットです ※@は除く)</label><br>
+        <input type="text" id="username" name="username" required><br><br>
+
+        <label for="start_date">Start Date (YYYY-MM-DD):</label>
+        <input type="date" id="start_date" name="start_date" required><br><br>
+
+        <label for="end_date">End Date (YYYY-MM-DD):</label>
+        <input type="date" id="end_date" name="end_date" required><br><br>
+
+        <button type="button" id="fetch-data">Fetch Data</button>
+        <button type="button" id="download-csv">Download CSV</button>
+        <button type="button" id="clear-data">Clear Data</button>
+    </form>
+
+    <div id="loading-popup">実行中です...</div>
+
+    <h2>Results</h2>
+    <p>Total Count: <span id="total-count">0</span></p>
+    <table border="1" id="results-table">
+        <thead>
+            <tr>
+                <th>Created At</th>
+                <th>Work Title</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+
+    <script>
+        document.getElementById("fetch-data").addEventListener("click", async function() {
+            const username = document.getElementById("username").value;
+            const startDate = new Date(document.getElementById("start_date").value);
+            const endDate = new Date(document.getElementById("end_date").value);
+            endDate.setHours(23, 59, 59); // 終了日時を23:59:59に設定
+
+            const resultsTable = document.getElementById("results-table").querySelector("tbody");
+            const totalCountEl = document.getElementById("total-count");
+            const loadingPopup = document.getElementById("loading-popup");
+
+            let count = 0;
+            let page = 1;
+            let flag = false;
+            const uniqueTitles = new Set();
+
+            resultsTable.innerHTML = ""; // テーブルのリセット
+            totalCountEl.textContent = "0"; // カウントのリセット
+
+            loadingPopup.style.display = "block"; // 実行中モーダルを表示
+
+            while (!flag) {
+                const url = `/.netlify/functions/fetch-activities?username=${username}&start_date=${startDate.toISOString()}&end_date=${endDate.toISOString()}&page=${page}`;
+
+                try {
+                    const response = await fetch(url);
+
+                    if (!response.ok) {
+                        alert(`Error: ${response.status}`);
+                        loadingPopup.style.display = "none"; // 実行中モーダルを非表示
+                        return;
+                    }
+
+                    const data = await response.json();
+
+                    if (!data.activities || data.activities.length === 0) {
+                        break;
+                    }
+
+                    for (const activity of data.activities) {
+                        if (activity.action === "create_status" && activity.status.kind === "watched") {
+                            const createdAt = new Date(activity.created_at);
+                            if (createdAt >= startDate && createdAt <= endDate) {
+                                if (!uniqueTitles.has(activity.work.title)) {
+                                    uniqueTitles.add(activity.work.title);
+                                    count++;
+
+                                    const row = document.createElement("tr");
+                                    const createdAtCell = document.createElement("td");
+                                    const titleCell = document.createElement("td");
+
+                                    createdAtCell.textContent = activity.created_at;
+                                    titleCell.textContent = activity.work.title;
+
+                                    row.appendChild(createdAtCell);
+                                    row.appendChild(titleCell);
+                                    resultsTable.appendChild(row);
+                                }
+                            } else if (createdAt < startDate) {
+                                flag = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (flag) {
+                        break;
+                    }
+
+                    page++;
+                    await new Promise(resolve => setTimeout(resolve, 1000)); // 1秒の待機
+                } catch (error) {
+                    console.error("Error fetching data:", error);
+                    alert("データ取得中にエラーが発生しました");
+                    loadingPopup.style.display = "none"; // 実行中モーダルを非表示
+                    return;
+                }
+            }
+
+            totalCountEl.textContent = count;
+            loadingPopup.style.display = "none"; // 実行中モーダルを非表示
+            alert("完了しました！");
+        });
+
+        document.getElementById("download-csv").addEventListener("click", function() {
+            const rows = [["Created At", "Work Title"]];
+            const resultsTable = document.getElementById("results-table").querySelector("tbody").children;
+        
+            for (const row of resultsTable) {
+                const cells = row.children;
+                rows.push([cells[0].textContent, cells[1].textContent]);
+            }
+        
+            const csvContent = rows.map(e => e.join(",")).join("\n");
+            const bom = "\uFEFF"; // BOMを追加
+            const blob = new Blob([bom + csvContent], { type: "text/csv;charset=utf-8;" });
+            const link = document.createElement("a");
+        
+            link.href = URL.createObjectURL(blob);
+            link.download = "filtered_data.csv";
+            link.style.display = "none";
+        
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+
+        document.getElementById("clear-data").addEventListener("click", function() {
+            const resultsTable = document.getElementById("results-table").querySelector("tbody");
+            const totalCountEl = document.getElementById("total-count");
+
+            resultsTable.innerHTML = ""; // テーブルをリセット
+            totalCountEl.textContent = "0"; // カウントをリセット
+
+            alert("データがクリアされました！");
+        });
+    </script>
+</body>
+</html>
