@@ -15,7 +15,7 @@
         </nav>
 
         <h1>視聴ステータス 共通項チェッカー</h1>
-        <p class="lede">2人のユーザー名と、それぞれの現在の視聴ステータスを指定して、両方の条件に一致する作品を一覧表示します。(例: 自分が「見た」、相手が「見たい」の作品 = おすすめできる作品)</p>
+        <p class="lede">2人のユーザー名と、それぞれの視聴ステータスを指定して、両方の条件に一致する作品を一覧表示します。(例: 自分が「見た」、相手が「見たい」の作品 = おすすめできる作品)</p>
 
         <div class="card">
             <form id="data-form">
@@ -27,11 +27,11 @@
                 <div class="field">
                     <label for="status1">Username 1 のステータス</label>
                     <select id="status1">
-                        <option value="wanna_watch">見たい</option>
-                        <option value="watching">見ている</option>
-                        <option value="watched" selected>見た</option>
-                        <option value="on_hold">一時中断</option>
-                        <option value="stop_watching">視聴中止</option>
+                        <option value="WANNA_WATCH">見たい</option>
+                        <option value="WATCHING">見ている</option>
+                        <option value="WATCHED" selected>見た</option>
+                        <option value="ON_HOLD">一時中断</option>
+                        <option value="STOP_WATCHING">視聴中止</option>
                     </select>
                 </div>
 
@@ -43,11 +43,11 @@
                 <div class="field">
                     <label for="status2">Username 2 のステータス</label>
                     <select id="status2">
-                        <option value="wanna_watch">見たい</option>
-                        <option value="watching">見ている</option>
-                        <option value="watched" selected>見た</option>
-                        <option value="on_hold">一時中断</option>
-                        <option value="stop_watching">視聴中止</option>
+                        <option value="WANNA_WATCH">見たい</option>
+                        <option value="WATCHING">見ている</option>
+                        <option value="WATCHED" selected>見た</option>
+                        <option value="ON_HOLD">一時中断</option>
+                        <option value="STOP_WATCHING">視聴中止</option>
                     </select>
                 </div>
 
@@ -81,23 +81,26 @@
     </div>
 
     <script>
+        const STATUS_LABELS = {
+            WANNA_WATCH: "見たい",
+            WATCHING: "見ている",
+            WATCHED: "見た",
+            ON_HOLD: "一時中断",
+            STOP_WATCHING: "視聴中止",
+        };
+
         // Annict側のレートリミット等、一時的な5xxエラーは間隔を広げながらリトライする。
         // 4xx(ユーザー名間違いなど)はリトライしても解決しないので即座に失敗させる。
         const RETRY_DELAYS_MS = [2000, 5000, 10000, 20000, 40000];
 
-        async function fetchPageWithRetry(username, page, progressEl) {
+        async function fetchLibraryPageWithRetry(username, state, after, progressEl) {
             for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
-                let response;
-                try {
-                    response = await fetch(`/.netlify/functions/fetch-activities?username=${username}&page=${page}`);
-                } catch (networkError) {
-                    if (attempt === RETRY_DELAYS_MS.length) {
-                        throw new Error(`${username} のデータ取得中にネットワークエラーが発生しました`);
-                    }
-                    await waitWithProgress(RETRY_DELAYS_MS[attempt], username, progressEl);
-                    continue;
+                const params = new URLSearchParams({ username, states: state });
+                if (after) {
+                    params.set("after", after);
                 }
 
+                const response = await fetch(`/.netlify/functions/fetch-library-entries?${params}`);
                 if (response.ok) {
                     return await response.json();
                 }
@@ -107,53 +110,45 @@
                 if (attempt === RETRY_DELAYS_MS.length) {
                     throw new Error(`${username} のデータ取得に失敗しました (status ${response.status})。Annict側が混雑している可能性があります。しばらく時間をおいて再度お試しください`);
                 }
-                await waitWithProgress(RETRY_DELAYS_MS[attempt], username, progressEl);
+                progressEl.textContent = `${username}: 一時的なエラーのため ${Math.round(RETRY_DELAYS_MS[attempt] / 1000)}秒待ってリトライします...`;
+                await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
             }
         }
 
-        async function waitWithProgress(ms, username, progressEl) {
-            progressEl.textContent = `${username}: 一時的なエラーのため ${Math.round(ms / 1000)}秒待ってリトライします...`;
-            await new Promise(resolve => setTimeout(resolve, ms));
-        }
-
-        // 指定ユーザーの作品ごとの「現在のステータス」を Map<workId, {title, status}> で全件取得する
-        // Annict APIはsort_id=descで新しい順に返るため、同じ作品IDについて最初に見つかったものが最新のステータスになる
-        async function fetchCurrentStatuses(username, progressEl) {
-            const statusOf = new Map();
-            let page = 1;
+        // 指定ユーザーの、指定ステータスの作品だけを Map<workId, title> で全件取得する
+        // (Annict GraphQL APIのlibraryEntriesはstatesで絞り込めるため、対象外のステータスは取得しない)
+        async function fetchWorksByStatus(username, state, progressEl) {
+            const works = new Map();
+            let after = null;
+            let page = 0;
+            const label = STATUS_LABELS[state];
 
             while (true) {
-                progressEl.textContent = `${username}: ${page}ページ目を取得中... (${statusOf.size}作品分のステータスを確認済み)`;
+                page++;
+                progressEl.textContent = `${username}(${label}): ${page}ページ目を取得中... (${works.size}件)`;
 
                 let data;
                 try {
-                    data = await fetchPageWithRetry(username, page, progressEl);
+                    data = await fetchLibraryPageWithRetry(username, state, after, progressEl);
                 } catch (error) {
                     // ここまで取得できた分だけで結果を出す(全体を失敗させない)
-                    progressEl.textContent = `${username}: ${page}ページ目で取得を打ち切りました(${statusOf.size}作品分のデータで集計します)。原因: ${error.message}`;
-                    return statusOf;
+                    progressEl.textContent = `${username}(${label}): ${page}ページ目で取得を打ち切りました(${works.size}件のデータで集計します)。原因: ${error.message}`;
+                    return works;
                 }
 
-                if (!data.activities || data.activities.length === 0) {
+                for (const node of data.nodes) {
+                    works.set(node.work.annictId, node.work.title);
+                }
+
+                if (!data.pageInfo.hasNextPage) {
                     break;
                 }
-
-                for (const activity of data.activities) {
-                    if (activity.action !== "create_status") {
-                        continue;
-                    }
-                    const workId = activity.work.id;
-                    if (!statusOf.has(workId)) {
-                        statusOf.set(workId, { title: activity.work.title, status: activity.status.kind });
-                    }
-                }
-
-                page++;
-                await new Promise(resolve => setTimeout(resolve, 500)); // 待機(レートリミット対策)
+                after = data.pageInfo.endCursor;
+                await new Promise(resolve => setTimeout(resolve, 300)); // 待機(レートリミット対策)
             }
 
-            progressEl.textContent = `${username}: 完了(${statusOf.size}作品)`;
-            return statusOf;
+            progressEl.textContent = `${username}(${label}): 完了(${works.size}件)`;
+            return works;
         }
 
         document.getElementById("fetch-data").addEventListener("click", async function() {
@@ -176,19 +171,15 @@
             loadingPopup.style.display = "block"; // 実行中モーダルを表示
 
             try {
-                const [statusOf1, statusOf2] = await Promise.all([
-                    fetchCurrentStatuses(username1, progressText1),
-                    fetchCurrentStatuses(username2, progressText2),
+                const [works1, works2] = await Promise.all([
+                    fetchWorksByStatus(username1, status1, progressText1),
+                    fetchWorksByStatus(username2, status2, progressText2),
                 ]);
 
                 const commonTitles = [];
-                for (const [workId, info1] of statusOf1) {
-                    if (info1.status !== status1) {
-                        continue;
-                    }
-                    const info2 = statusOf2.get(workId);
-                    if (info2 && info2.status === status2) {
-                        commonTitles.push(info1.title);
+                for (const [workId, title] of works1) {
+                    if (works2.has(workId)) {
+                        commonTitles.push(title);
                     }
                 }
                 commonTitles.sort((a, b) => a.localeCompare(b, "ja"));
