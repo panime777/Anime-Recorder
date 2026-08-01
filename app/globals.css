@@ -308,7 +308,7 @@ button:disabled {
 
 .review-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 1.5rem 1rem;
 }
 
@@ -328,10 +328,13 @@ button:disabled {
 .review-cover-frame {
   position: relative;
   overflow: hidden;
-  aspect-ratio: 2 / 3;
+  /* recommendedImageUrl usually points at each work's own official-site OGP
+     banner (wide, arbitrary size) rather than a poster-shaped cover, so this
+     frame is landscape and images are letterboxed instead of cropped. */
+  aspect-ratio: 16 / 9;
   border: 1px solid var(--color-border);
   border-radius: 10px;
-  background: var(--color-surface);
+  background: var(--color-bg);
   box-shadow: var(--shadow-card);
 }
 
@@ -343,7 +346,7 @@ button:disabled {
 
 .review-cover {
   display: block;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .review-cover-placeholder {
