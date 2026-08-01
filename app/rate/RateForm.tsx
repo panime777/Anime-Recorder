@@ -4,11 +4,31 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import type { QueuedWork } from "@/lib/annict-user";
 
-export default function RateForm({ work }: { work: QueuedWork }) {
+interface InitialValues {
+  score: number;
+  tags: string[];
+  comment: string;
+}
+
+interface RateFormProps {
+  work: Pick<QueuedWork, "annictId" | "title" | "imageUrl">;
+  initialValues?: InitialValues;
+  redirectTo?: string;
+  submitLabel?: string;
+  onSaved?: () => void;
+}
+
+export default function RateForm({
+  work,
+  initialValues = { score: 5, tags: [], comment: "" },
+  redirectTo,
+  submitLabel = "保存して次へ",
+  onSaved,
+}: RateFormProps) {
   const router = useRouter();
-  const [score, setScore] = useState(5);
-  const [tags, setTags] = useState("");
-  const [comment, setComment] = useState("");
+  const [score, setScore] = useState(initialValues.score);
+  const [tags, setTags] = useState(initialValues.tags.join(", "));
+  const [comment, setComment] = useState(initialValues.comment);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -34,9 +54,14 @@ export default function RateForm({ work }: { work: QueuedWork }) {
       };
       if (!response.ok || !result.ok) throw new Error(result.error || "保存に失敗しました");
 
-      router.refresh();
+      setScore(5);
+      setTags("");
+      setComment("");
+      onSaved?.();
+      if (redirectTo) router.push(redirectTo);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "保存に失敗しました");
+    } finally {
       setSubmitting(false);
     }
   }
@@ -78,7 +103,7 @@ export default function RateForm({ work }: { work: QueuedWork }) {
       </div>
       <div className="actions">
         <button type="submit" className="primary" disabled={submitting}>
-          {submitting ? "保存中…" : "保存して次へ"}
+          {submitting ? "保存中…" : submitLabel}
         </button>
       </div>
       {message && <p className="form-message" role="status">{message}</p>}

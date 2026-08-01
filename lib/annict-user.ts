@@ -12,7 +12,7 @@ const WATCHED_WORKS_QUERY = `
             id
             annictId
             title
-            image { recommendedImageUrl }
+            image { recommendedImageUrl facebookOgImageUrl }
           }
         }
       }
@@ -37,6 +37,24 @@ const WATCHED_WORKS_WITHOUT_IMAGES_QUERY = `
   }
 `;
 
+const WORK_IMAGE_QUERY = `
+  query($annictIds: [Int!]) {
+    searchWorks(annictIds: $annictIds) {
+      nodes {
+        image { recommendedImageUrl facebookOgImageUrl }
+      }
+    }
+  }
+`;
+
+// recommendedImageUrl isn't set for every work; fall back to the
+// (near-universally present) OGP image so fewer works end up with no
+// cover at all. Both are the work's official-site banner art, so the
+// two stay visually consistent when mixed in the same grid.
+function pickImageUrl(image?: { recommendedImageUrl: string | null; facebookOgImageUrl: string | null } | null) {
+  return image?.recommendedImageUrl || image?.facebookOgImageUrl || null;
+}
+
 export interface QueuedWork {
   annictId: number;
   globalId: string;
@@ -45,7 +63,7 @@ export interface QueuedWork {
 }
 
 export interface RatingQueue {
-  next: QueuedWork | null;
+  items: QueuedWork[];
   remaining: number;
 }
 
@@ -59,7 +77,7 @@ interface LibraryResponse {
             id: string;
             annictId: number;
             title: string;
-            image?: { recommendedImageUrl: string | null } | null;
+            image?: { recommendedImageUrl: string | null; facebookOgImageUrl: string | null } | null;
           };
         }>;
       };
@@ -90,10 +108,10 @@ async function annictRequest<T>(accessToken: string, query: string, variables: o
   }
 }
 
-export async function findNextUnreviewedWork(
+export async function findUnreviewedWorks(
   userId: string,
   accessToken: string,
-  includeNextImage = true,
+  includeImages = true,
 ): Promise<RatingQueue> {
   const reviews = await prisma.review.findMany({
     where: { userId },
@@ -101,13 +119,12 @@ export async function findNextUnreviewedWork(
   });
   const reviewedIds = new Set(reviews.map((review) => review.work.annictId));
   let after: string | null = null;
-  let next: QueuedWork | null = null;
-  let remaining = 0;
+  const items: QueuedWork[] = [];
 
   while (true) {
     const result: LibraryResponse = await annictRequest<LibraryResponse>(
       accessToken,
-      includeNextImage ? WATCHED_WORKS_QUERY : WATCHED_WORKS_WITHOUT_IMAGES_QUERY,
+      includeImages ? WATCHED_WORKS_QUERY : WATCHED_WORKS_WITHOUT_IMAGES_QUERY,
       { after },
     );
     if (result.errors?.length) {
@@ -121,20 +138,43 @@ export async function findNextUnreviewedWork(
     for (const node of entries.nodes) {
       if (reviewedIds.has(node.work.annictId)) continue;
 
-      remaining += 1;
-      next ??= {
+      items.push({
         annictId: node.work.annictId,
         globalId: node.work.id,
         title: node.work.title,
-        imageUrl: node.work.image?.recommendedImageUrl ?? null,
-      };
+        imageUrl: pickImageUrl(node.work.image),
+      });
     }
 
-    if (!entries.pageInfo.hasNextPage) return { next, remaining };
+    if (!entries.pageInfo.hasNextPage) return { items, remaining: items.length };
     const nextCursor = entries.pageInfo.endCursor;
     if (!nextCursor || nextCursor === after) {
       throw new Error("Annict library pagination returned an invalid cursor");
     }
     after = nextCursor;
   }
+}
+
+interface WorkImageResponse {
+  data?: {
+    searchWorks?: {
+      nodes: Array<{
+        image?: { recommendedImageUrl: string | null; facebookOgImageUrl: string | null } | null;
+      }>;
+    } | null;
+  };
+  errors?: Array<{ message?: string }>;
+}
+
+// Looks up a single work's current image directly, instead of walking the
+// whole watched library. Used when editing an existing review, since the
+// image saved on our own Work row may predate this fallback logic (or be
+// stale for any other reason) and we want the edit to pick up the current
+// best-known image rather than just resaving whatever's already stored.
+export async function fetchWorkImage(accessToken: string, annictId: number): Promise<string | null> {
+  const result = await annictRequest<WorkImageResponse>(accessToken, WORK_IMAGE_QUERY, {
+    annictIds: [annictId],
+  });
+  if (result.errors?.length || !result.data?.searchWorks) return null;
+  return pickImageUrl(result.data.searchWorks.nodes[0]?.image);
 }

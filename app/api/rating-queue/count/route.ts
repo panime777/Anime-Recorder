@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { findNextUnreviewedWork } from "@/lib/annict-user";
+import { findUnreviewedWorks } from "@/lib/annict-user";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -18,7 +18,7 @@ export async function GET() {
   }
 
   try {
-    const queue = await findNextUnreviewedWork(session.user.id, user.accessToken, false);
+    const queue = await findUnreviewedWorks(session.user.id, user.accessToken, false);
     return NextResponse.json({ remaining: queue.remaining });
   } catch (error) {
     console.error("Failed to load rating queue count", error);

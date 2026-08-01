@@ -1,6 +1,7 @@
 import ToolNav from "@/app/components/ToolNav";
 import { auth, signIn } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import Link from "next/link";
 
 export default async function ReviewsPage() {
   const session = await auth();
@@ -38,24 +39,30 @@ export default async function ReviewsPage() {
       ) : (
         <div className="review-grid">
           {reviews.map((review) => (
-            <article className="review-grid-item" key={review.id}>
-              <div className="review-cover-frame">
-                {review.work.imageUrl ? (
-                  // Annict supplies the image URL; a regular img avoids restricting its CDN host.
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    className="review-cover"
-                    src={review.work.imageUrl}
-                    alt={`${review.work.title}のカバー画像`}
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="review-cover-placeholder" aria-hidden="true">No image</div>
-                )}
-                <span className="review-score">{review.score}/10</span>
-              </div>
-              <h2 className="review-title">{review.work.title}</h2>
-            </article>
+            <Link
+              className="review-grid-link"
+              href={`/reviews/${review.work.annictId}`}
+              key={review.id}
+            >
+              <article className="review-grid-item">
+                <div className="review-cover-frame">
+                  {review.work.imageUrl ? (
+                    // Annict supplies the image URL; a regular img avoids restricting its CDN host.
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      className="review-cover"
+                      src={review.work.imageUrl}
+                      alt={`${review.work.title}のカバー画像`}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="review-cover-placeholder" aria-hidden="true">No image</div>
+                  )}
+                  <span className="review-score">{review.score}/10</span>
+                </div>
+                <h2 className="review-title">{review.work.title}</h2>
+              </article>
+            </Link>
           ))}
         </div>
       )}
