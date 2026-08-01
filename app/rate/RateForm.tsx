@@ -30,17 +30,11 @@ export default function RateForm({ work }: { work: QueuedWork }) {
       });
       const result = (await response.json()) as {
         ok?: boolean;
-        annictSynced?: boolean;
         error?: string;
       };
       if (!response.ok || !result.ok) throw new Error(result.error || "保存に失敗しました");
 
-      if (result.annictSynced === false) {
-        setMessage("採点は保存しましたが、Annictへの同期に失敗しました。再ログインが必要な場合があります。");
-        setTimeout(() => router.refresh(), 1800);
-      } else {
-        router.refresh();
-      }
+      router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "保存に失敗しました");
       setSubmitting(false);

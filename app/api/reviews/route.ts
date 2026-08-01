@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { markWorkWatched } from "@/lib/annict-user";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -7,7 +6,6 @@ const MAX_TITLE_LENGTH = 500;
 const MAX_COMMENT_LENGTH = 5_000;
 const MAX_TAGS = 20;
 const MAX_TAG_LENGTH = 50;
-const MAX_GLOBAL_ID_LENGTH = 500;
 const MAX_IMAGE_URL_LENGTH = 2_000;
 
 function error(message: string, status = 400) {
@@ -30,7 +28,6 @@ export async function POST(request: Request) {
   const annictId = input.annictId;
   const title = typeof input.title === "string" ? input.title.trim() : "";
   const score = input.score;
-  const globalId = typeof input.globalId === "string" ? input.globalId.trim() : "";
   const comment = typeof input.comment === "string" ? input.comment.trim() : null;
   const imageUrl = typeof input.imageUrl === "string" ? input.imageUrl.trim() : null;
 
@@ -42,9 +39,6 @@ export async function POST(request: Request) {
   }
   if (!Number.isInteger(score) || (score as number) < 0 || (score as number) > 10) {
     return error("scoreは0〜10の整数で指定してください");
-  }
-  if (!globalId || globalId.length > MAX_GLOBAL_ID_LENGTH) {
-    return error("globalIdが不正です");
   }
   if (input.imageUrl !== undefined && input.imageUrl !== null && typeof input.imageUrl !== "string") {
     return error("imageUrlは文字列で指定してください");
@@ -69,12 +63,6 @@ export async function POST(request: Request) {
     return error(`各tagは${MAX_TAG_LENGTH}文字以内で指定してください`);
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { accessToken: true },
-  });
-  if (!user) return error("ユーザー情報が見つかりません。再ログインしてください", 401);
-
   const work = await prisma.work.upsert({
     where: { annictId: annictId as number },
     update: { title, imageUrl: imageUrl ?? null },
@@ -92,13 +80,5 @@ export async function POST(request: Request) {
     },
   });
 
-  let annictSynced = true;
-  try {
-    await markWorkWatched(user.accessToken, globalId);
-  } catch (syncError) {
-    annictSynced = false;
-    console.error("Review saved locally, but Annict status sync failed", syncError);
-  }
-
-  return NextResponse.json({ ok: true, annictSynced });
+  return NextResponse.json({ ok: true });
 }

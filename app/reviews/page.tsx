@@ -36,10 +36,10 @@ export default async function ReviewsPage() {
           <p className="caught-up">まだ採点した作品がありません。</p>
         </div>
       ) : (
-        <div className="review-list">
+        <div className="review-grid">
           {reviews.map((review) => (
-            <article className="card review-card" key={review.id}>
-              <div>
+            <article className="review-grid-item" key={review.id}>
+              <div className="review-cover-frame">
                 {review.work.imageUrl ? (
                   // Annict supplies the image URL; a regular img avoids restricting its CDN host.
                   // eslint-disable-next-line @next/next/no-img-element
@@ -52,17 +52,9 @@ export default async function ReviewsPage() {
                 ) : (
                   <div className="review-cover-placeholder" aria-hidden="true">No image</div>
                 )}
+                <span className="review-score">{review.score}/10</span>
               </div>
-              <div>
-                <h2 className="review-title">{review.work.title}</h2>
-                <p className="review-score">{review.score} / 10</p>
-                {review.tags.length > 0 && (
-                  <div className="review-tags" aria-label="タグ">
-                    {review.tags.map((tag) => <span className="review-tag" key={tag}>{tag}</span>)}
-                  </div>
-                )}
-                {review.comment && <p className="review-comment">{review.comment}</p>}
-              </div>
+              <h2 className="review-title">{review.work.title}</h2>
             </article>
           ))}
         </div>

@@ -20,14 +20,6 @@ const WATCHED_WORKS_QUERY = `
   }
 `;
 
-const UPDATE_STATUS_MUTATION = `
-  mutation($workId: ID!, $state: StatusState!) {
-    updateStatus(input: { workId: $workId, state: $state }) {
-      work { id annictId title }
-    }
-  }
-`;
-
 export interface QueuedWork {
   annictId: number;
   globalId: string;
@@ -56,11 +48,6 @@ interface LibraryResponse {
       };
     } | null;
   };
-  errors?: Array<{ message?: string }>;
-}
-
-interface MutationResponse {
-  data?: { updateStatus?: { work: { id: string } | null } | null };
   errors?: Array<{ message?: string }>;
 }
 
@@ -131,19 +118,5 @@ export async function findNextUnreviewedWork(
       throw new Error("Annict library pagination returned an invalid cursor");
     }
     after = nextCursor;
-  }
-}
-
-export async function markWorkWatched(accessToken: string, globalId: string): Promise<void> {
-  const result = await annictRequest<MutationResponse>(accessToken, UPDATE_STATUS_MUTATION, {
-    workId: globalId,
-    state: "WATCHED",
-  });
-  if (result.errors?.length) {
-    const details = result.errors.map((error) => error.message).filter(Boolean).join(", ");
-    throw new Error(`Annict status update failed${details ? `: ${details}` : ""}`);
-  }
-  if (!result.data?.updateStatus?.work) {
-    throw new Error("Annict status update returned no work");
   }
 }
