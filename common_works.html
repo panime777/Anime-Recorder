@@ -4,62 +4,74 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Annict 視聴済み作品 共通項チェッカー</title>
-    <style>
-        #loading-popup {
-            display: none;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            z-index: 1000;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>2人の視聴済み作品 共通項チェッカー</h1>
+    <div class="page">
+        <nav class="tool-nav">
+            <a href="index.html">トップ</a>
+            <a href="watched_list.html">視聴済みリスト</a>
+            <a href="common_works.html" class="active">共通項チェッカー</a>
+        </nav>
 
-    <form id="data-form">
-        <label for="username1">Username 1:(@から始まるアルファベットです ※@は除く)</label><br>
-        <input type="text" id="username1" name="username1" required><br><br>
+        <h1>2人の視聴済み作品 共通項チェッカー</h1>
+        <p class="lede">2人のユーザー名を指定して、お互いが視聴済み(watched)にした作品を一覧表示します。</p>
 
-        <label for="username2">Username 2:</label><br>
-        <input type="text" id="username2" name="username2" required><br><br>
+        <div class="card">
+            <form id="data-form">
+                <div class="field">
+                    <label for="username1">Username 1 <span class="hint">(@から始まるアルファベットです ※@は除く)</span></label>
+                    <input type="text" id="username1" name="username1" required>
+                </div>
 
-        <button type="button" id="fetch-data">Compare</button>
-        <button type="button" id="download-csv">Download CSV</button>
-        <button type="button" id="clear-data">Clear Data</button>
-    </form>
+                <div class="field">
+                    <label for="username2">Username 2</label>
+                    <input type="text" id="username2" name="username2" required>
+                </div>
 
-    <div id="loading-popup">実行中です...</div>
+                <div class="actions">
+                    <button type="button" id="fetch-data" class="primary">Compare</button>
+                    <button type="button" id="download-csv" class="secondary">Download CSV</button>
+                    <button type="button" id="clear-data" class="secondary">Clear Data</button>
+                </div>
+            </form>
+        </div>
 
-    <h2>Results</h2>
-    <p>Common Count: <span id="total-count">0</span></p>
-    <table border="1" id="results-table">
-        <thead>
-            <tr>
-                <th>Work Title</th>
-            </tr>
-        </thead>
-        <tbody>
-        </tbody>
-    </table>
+        <div id="loading-popup">実行中です...</div>
+
+        <div class="card">
+            <div class="results-header">
+                <h2>Results</h2>
+                <span class="count">Common: <strong id="total-count">0</strong></span>
+            </div>
+            <p class="progress" id="progress-text"></p>
+            <table id="results-table">
+                <thead>
+                    <tr>
+                        <th>Work Title</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+    </div>
 
     <script>
+        const progressText = document.getElementById("progress-text");
+
         // 指定ユーザーの視聴済み(watched)作品を Map<workId, title> で全件取得する
         async function fetchWatchedWorks(username) {
             const watched = new Map();
             let page = 1;
 
             while (true) {
+                progressText.textContent = `${username} のデータを取得中... (${page}ページ目、これまでに ${watched.size} 件のwatchedを確認)`;
                 const url = `/.netlify/functions/fetch-activities?username=${username}&page=${page}`;
                 const response = await fetch(url);
 
                 if (!response.ok) {
-                    throw new Error(`Error fetching ${username}: ${response.status}`);
+                    throw new Error(`${username} のデータ取得に失敗しました (status ${response.status})。ユーザー名が正しいか確認してください`);
                 }
 
                 const data = await response.json();
@@ -75,7 +87,7 @@
                 }
 
                 page++;
-                await new Promise(resolve => setTimeout(resolve, 1000)); // 1秒の待機(レートリミット対策)
+                await new Promise(resolve => setTimeout(resolve, 300)); // 待機(レートリミット対策)
             }
 
             return watched;
@@ -91,6 +103,7 @@
 
             resultsTable.innerHTML = ""; // テーブルのリセット
             totalCountEl.textContent = "0"; // カウントのリセット
+            progressText.textContent = "";
 
             loadingPopup.style.display = "block"; // 実行中モーダルを表示
 
@@ -99,6 +112,8 @@
                     fetchWatchedWorks(username1),
                     fetchWatchedWorks(username2),
                 ]);
+
+                progressText.textContent = `${username1}: ${watched1.size}件 / ${username2}: ${watched2.size}件のwatchedを取得しました`;
 
                 const commonTitles = [];
                 for (const [workId, title] of watched1) {
@@ -119,7 +134,8 @@
                 totalCountEl.textContent = commonTitles.length;
             } catch (error) {
                 console.error("Error fetching data:", error);
-                alert("データ取得中にエラーが発生しました");
+                alert(error.message || "データ取得中にエラーが発生しました");
+                progressText.textContent = "";
             } finally {
                 loadingPopup.style.display = "none"; // 実行中モーダルを非表示
             }
@@ -154,6 +170,7 @@
 
             resultsTable.innerHTML = ""; // テーブルをリセット
             totalCountEl.textContent = "0"; // カウントをリセット
+            progressText.textContent = "";
 
             alert("データがクリアされました！");
         });
