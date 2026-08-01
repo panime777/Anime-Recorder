@@ -8,6 +8,7 @@ const MAX_COMMENT_LENGTH = 5_000;
 const MAX_TAGS = 20;
 const MAX_TAG_LENGTH = 50;
 const MAX_GLOBAL_ID_LENGTH = 500;
+const MAX_IMAGE_URL_LENGTH = 2_000;
 
 function error(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -31,6 +32,7 @@ export async function POST(request: Request) {
   const score = input.score;
   const globalId = typeof input.globalId === "string" ? input.globalId.trim() : "";
   const comment = typeof input.comment === "string" ? input.comment.trim() : null;
+  const imageUrl = typeof input.imageUrl === "string" ? input.imageUrl.trim() : null;
 
   if (!Number.isInteger(annictId) || (annictId as number) <= 0) {
     return error("annictIdは正の整数で指定してください");
@@ -43,6 +45,12 @@ export async function POST(request: Request) {
   }
   if (!globalId || globalId.length > MAX_GLOBAL_ID_LENGTH) {
     return error("globalIdが不正です");
+  }
+  if (input.imageUrl !== undefined && input.imageUrl !== null && typeof input.imageUrl !== "string") {
+    return error("imageUrlは文字列で指定してください");
+  }
+  if (imageUrl && imageUrl.length > MAX_IMAGE_URL_LENGTH) {
+    return error(`imageUrlは${MAX_IMAGE_URL_LENGTH}文字以内で指定してください`);
   }
   if (input.comment !== undefined && input.comment !== null && typeof input.comment !== "string") {
     return error("commentは文字列で指定してください");
@@ -69,8 +77,8 @@ export async function POST(request: Request) {
 
   const work = await prisma.work.upsert({
     where: { annictId: annictId as number },
-    update: { title },
-    create: { annictId: annictId as number, title },
+    update: { title, imageUrl: imageUrl ?? null },
+    create: { annictId: annictId as number, title, imageUrl: imageUrl ?? null },
   });
   await prisma.review.upsert({
     where: { userId_workId: { userId: session.user.id, workId: work.id } },

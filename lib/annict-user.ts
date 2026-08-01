@@ -7,7 +7,14 @@ const WATCHED_WORKS_QUERY = `
     viewer {
       libraryEntries(states: [WATCHED], first: 50, after: $after) {
         pageInfo { hasNextPage endCursor }
-        nodes { work { id annictId title } }
+        nodes {
+          work {
+            id
+            annictId
+            title
+            image { recommendedImageUrl }
+          }
+        }
       }
     }
   }
@@ -25,6 +32,7 @@ export interface QueuedWork {
   annictId: number;
   globalId: string;
   title: string;
+  imageUrl: string | null;
 }
 
 export interface RatingQueue {
@@ -37,7 +45,14 @@ interface LibraryResponse {
     viewer?: {
       libraryEntries: {
         pageInfo: { hasNextPage: boolean; endCursor: string | null };
-        nodes: Array<{ work: { id: string; annictId: number; title: string } }>;
+        nodes: Array<{
+          work: {
+            id: string;
+            annictId: number;
+            title: string;
+            image: { recommendedImageUrl: string | null } | null;
+          };
+        }>;
       };
     } | null;
   };
@@ -106,6 +121,7 @@ export async function findNextUnreviewedWork(
         annictId: node.work.annictId,
         globalId: node.work.id,
         title: node.work.title,
+        imageUrl: node.work.image?.recommendedImageUrl ?? null,
       };
     }
 
