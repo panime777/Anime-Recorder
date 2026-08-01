@@ -44,7 +44,7 @@ const AnnictProvider: OAuthConfig<AnnictProfile> = {
   clientSecret: process.env.ANNICT_CLIENT_SECRET,
   authorization: {
     url: "https://annict.com/oauth/authorize",
-    params: { scope: "read" },
+    params: { scope: "read write" },
   },
   token: "https://api.annict.com/oauth/token",
   userinfo: {

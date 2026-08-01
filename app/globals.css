@@ -86,7 +86,9 @@ label .hint {
 }
 
 input[type="text"],
-input[type="date"] {
+input[type="date"],
+input[type="number"],
+textarea {
   width: 100%;
   padding: 0.6rem 0.75rem;
   border: 1px solid var(--color-border);
@@ -97,7 +99,9 @@ input[type="date"] {
 }
 
 input[type="text"]:focus,
-input[type="date"]:focus {
+input[type="date"]:focus,
+input[type="number"]:focus,
+textarea:focus {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
 }
@@ -279,4 +283,25 @@ nav.tool-nav a:hover {
 .auth-status p {
   margin: 0;
   font-size: 0.9rem;
+}
+
+textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.work-title {
+  margin: 0 0 1.25rem;
+  font-size: 1.25rem;
+}
+
+.form-message,
+.caught-up {
+  color: var(--color-text-muted);
+  margin: 1rem 0 0;
 }

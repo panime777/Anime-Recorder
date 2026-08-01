@@ -40,6 +40,10 @@ export default async function Home() {
       <div className="card">
         <ul className="tool-list">
           <li>
+            <a href="/rate">次に見た作品を採点</a>
+            <p>Annictで視聴済みの未採点作品を、1作品ずつ採点します。</p>
+          </li>
+          <li>
             <a href="/tools/watched-list">視聴済み作品リスト取得</a>
             <p>ユーザー名と期間を指定して、視聴済み作品の一覧をCSVで書き出します。</p>
           </li>
