@@ -95,6 +95,10 @@ const AnnictProvider: OAuthConfig<AnnictProfile> = {
 };
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  // Netlify deploy previews and production don't share a single fixed URL,
+  // so Auth.js can't be given one true AUTH_URL up front — trust the
+  // incoming Host header instead (safe here since Netlify's edge sets it).
+  trustHost: true,
   providers: [AnnictProvider],
   callbacks: {
     async jwt({ token, profile, account }) {
