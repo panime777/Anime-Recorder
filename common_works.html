@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Annict 視聴済み作品 共通項チェッカー</title>
+    <title>Annict 視聴ステータス 共通項チェッカー</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -14,8 +14,8 @@
             <a href="common_works.html" class="active">共通項チェッカー</a>
         </nav>
 
-        <h1>2人の視聴済み作品 共通項チェッカー</h1>
-        <p class="lede">2人のユーザー名を指定して、お互いが視聴済み(watched)にした作品を一覧表示します。</p>
+        <h1>視聴ステータス 共通項チェッカー</h1>
+        <p class="lede">2人のユーザー名と、それぞれの現在の視聴ステータスを指定して、両方の条件に一致する作品を一覧表示します。(例: 自分が「見た」、相手が「見たい」の作品 = おすすめできる作品)</p>
 
         <div class="card">
             <form id="data-form">
@@ -25,8 +25,30 @@
                 </div>
 
                 <div class="field">
+                    <label for="status1">Username 1 のステータス</label>
+                    <select id="status1">
+                        <option value="wanna_watch">見たい</option>
+                        <option value="watching">見ている</option>
+                        <option value="watched" selected>見た</option>
+                        <option value="on_hold">一時中断</option>
+                        <option value="stop_watching">視聴中止</option>
+                    </select>
+                </div>
+
+                <div class="field">
                     <label for="username2">Username 2</label>
                     <input type="text" id="username2" name="username2" required>
+                </div>
+
+                <div class="field">
+                    <label for="status2">Username 2 のステータス</label>
+                    <select id="status2">
+                        <option value="wanna_watch">見たい</option>
+                        <option value="watching">見ている</option>
+                        <option value="watched" selected>見た</option>
+                        <option value="on_hold">一時中断</option>
+                        <option value="stop_watching">視聴中止</option>
+                    </select>
                 </div>
 
                 <div class="actions">
@@ -44,7 +66,8 @@
                 <h2>Results</h2>
                 <span class="count">Common: <strong id="total-count">0</strong></span>
             </div>
-            <p class="progress" id="progress-text"></p>
+            <p class="progress" id="progress-text-1"></p>
+            <p class="progress" id="progress-text-2"></p>
             <table id="results-table">
                 <thead>
                     <tr>
@@ -58,67 +81,114 @@
     </div>
 
     <script>
-        const progressText = document.getElementById("progress-text");
+        // Annict側のレートリミット等、一時的な5xxエラーは間隔を広げながらリトライする。
+        // 4xx(ユーザー名間違いなど)はリトライしても解決しないので即座に失敗させる。
+        const RETRY_DELAYS_MS = [2000, 5000, 10000, 20000, 40000];
 
-        // 指定ユーザーの視聴済み(watched)作品を Map<workId, title> で全件取得する
-        async function fetchWatchedWorks(username) {
-            const watched = new Map();
+        async function fetchPageWithRetry(username, page, progressEl) {
+            for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+                let response;
+                try {
+                    response = await fetch(`/.netlify/functions/fetch-activities?username=${username}&page=${page}`);
+                } catch (networkError) {
+                    if (attempt === RETRY_DELAYS_MS.length) {
+                        throw new Error(`${username} のデータ取得中にネットワークエラーが発生しました`);
+                    }
+                    await waitWithProgress(RETRY_DELAYS_MS[attempt], username, progressEl);
+                    continue;
+                }
+
+                if (response.ok) {
+                    return await response.json();
+                }
+                if (response.status < 500) {
+                    throw new Error(`${username} のデータ取得に失敗しました (status ${response.status})。ユーザー名が正しいか確認してください`);
+                }
+                if (attempt === RETRY_DELAYS_MS.length) {
+                    throw new Error(`${username} のデータ取得に失敗しました (status ${response.status})。Annict側が混雑している可能性があります。しばらく時間をおいて再度お試しください`);
+                }
+                await waitWithProgress(RETRY_DELAYS_MS[attempt], username, progressEl);
+            }
+        }
+
+        async function waitWithProgress(ms, username, progressEl) {
+            progressEl.textContent = `${username}: 一時的なエラーのため ${Math.round(ms / 1000)}秒待ってリトライします...`;
+            await new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // 指定ユーザーの作品ごとの「現在のステータス」を Map<workId, {title, status}> で全件取得する
+        // Annict APIはsort_id=descで新しい順に返るため、同じ作品IDについて最初に見つかったものが最新のステータスになる
+        async function fetchCurrentStatuses(username, progressEl) {
+            const statusOf = new Map();
             let page = 1;
 
             while (true) {
-                progressText.textContent = `${username} のデータを取得中... (${page}ページ目、これまでに ${watched.size} 件のwatchedを確認)`;
-                const url = `/.netlify/functions/fetch-activities?username=${username}&page=${page}`;
-                const response = await fetch(url);
+                progressEl.textContent = `${username}: ${page}ページ目を取得中... (${statusOf.size}作品分のステータスを確認済み)`;
 
-                if (!response.ok) {
-                    throw new Error(`${username} のデータ取得に失敗しました (status ${response.status})。ユーザー名が正しいか確認してください`);
+                let data;
+                try {
+                    data = await fetchPageWithRetry(username, page, progressEl);
+                } catch (error) {
+                    // ここまで取得できた分だけで結果を出す(全体を失敗させない)
+                    progressEl.textContent = `${username}: ${page}ページ目で取得を打ち切りました(${statusOf.size}作品分のデータで集計します)。原因: ${error.message}`;
+                    return statusOf;
                 }
-
-                const data = await response.json();
 
                 if (!data.activities || data.activities.length === 0) {
                     break;
                 }
 
                 for (const activity of data.activities) {
-                    if (activity.action === "create_status" && activity.status.kind === "watched") {
-                        watched.set(activity.work.id, activity.work.title);
+                    if (activity.action !== "create_status") {
+                        continue;
+                    }
+                    const workId = activity.work.id;
+                    if (!statusOf.has(workId)) {
+                        statusOf.set(workId, { title: activity.work.title, status: activity.status.kind });
                     }
                 }
 
                 page++;
-                await new Promise(resolve => setTimeout(resolve, 300)); // 待機(レートリミット対策)
+                await new Promise(resolve => setTimeout(resolve, 500)); // 待機(レートリミット対策)
             }
 
-            return watched;
+            progressEl.textContent = `${username}: 完了(${statusOf.size}作品)`;
+            return statusOf;
         }
 
         document.getElementById("fetch-data").addEventListener("click", async function() {
             const username1 = document.getElementById("username1").value;
             const username2 = document.getElementById("username2").value;
+            const status1 = document.getElementById("status1").value;
+            const status2 = document.getElementById("status2").value;
 
             const resultsTable = document.getElementById("results-table").querySelector("tbody");
             const totalCountEl = document.getElementById("total-count");
             const loadingPopup = document.getElementById("loading-popup");
+            const progressText1 = document.getElementById("progress-text-1");
+            const progressText2 = document.getElementById("progress-text-2");
 
             resultsTable.innerHTML = ""; // テーブルのリセット
             totalCountEl.textContent = "0"; // カウントのリセット
-            progressText.textContent = "";
+            progressText1.textContent = "";
+            progressText2.textContent = "";
 
             loadingPopup.style.display = "block"; // 実行中モーダルを表示
 
             try {
-                const [watched1, watched2] = await Promise.all([
-                    fetchWatchedWorks(username1),
-                    fetchWatchedWorks(username2),
+                const [statusOf1, statusOf2] = await Promise.all([
+                    fetchCurrentStatuses(username1, progressText1),
+                    fetchCurrentStatuses(username2, progressText2),
                 ]);
 
-                progressText.textContent = `${username1}: ${watched1.size}件 / ${username2}: ${watched2.size}件のwatchedを取得しました`;
-
                 const commonTitles = [];
-                for (const [workId, title] of watched1) {
-                    if (watched2.has(workId)) {
-                        commonTitles.push(title);
+                for (const [workId, info1] of statusOf1) {
+                    if (info1.status !== status1) {
+                        continue;
+                    }
+                    const info2 = statusOf2.get(workId);
+                    if (info2 && info2.status === status2) {
+                        commonTitles.push(info1.title);
                     }
                 }
                 commonTitles.sort((a, b) => a.localeCompare(b, "ja"));
@@ -135,7 +205,8 @@
             } catch (error) {
                 console.error("Error fetching data:", error);
                 alert(error.message || "データ取得中にエラーが発生しました");
-                progressText.textContent = "";
+                progressText1.textContent = "";
+                progressText2.textContent = "";
             } finally {
                 loadingPopup.style.display = "none"; // 実行中モーダルを非表示
             }
@@ -170,7 +241,8 @@
 
             resultsTable.innerHTML = ""; // テーブルをリセット
             totalCountEl.textContent = "0"; // カウントをリセット
-            progressText.textContent = "";
+            document.getElementById("progress-text-1").textContent = "";
+            document.getElementById("progress-text-2").textContent = "";
 
             alert("データがクリアされました！");
         });
