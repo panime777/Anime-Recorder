@@ -27,6 +27,11 @@ export interface QueuedWork {
   title: string;
 }
 
+export interface RatingQueue {
+  next: QueuedWork | null;
+  remaining: number;
+}
+
 interface LibraryResponse {
   data?: {
     viewer?: {
@@ -69,13 +74,15 @@ async function annictRequest<T>(accessToken: string, query: string, variables: o
 export async function findNextUnreviewedWork(
   userId: string,
   accessToken: string,
-): Promise<QueuedWork | null> {
+): Promise<RatingQueue> {
   const reviews = await prisma.review.findMany({
     where: { userId },
     select: { work: { select: { annictId: true } } },
   });
   const reviewedIds = new Set(reviews.map((review) => review.work.annictId));
   let after: string | null = null;
+  let next: QueuedWork | null = null;
+  let remaining = 0;
 
   while (true) {
     const result: LibraryResponse = await annictRequest<LibraryResponse>(
@@ -91,16 +98,18 @@ export async function findNextUnreviewedWork(
     const entries = result.data?.viewer?.libraryEntries;
     if (!entries) throw new Error("Annict library response did not include the viewer");
 
-    const next = entries.nodes.find((node) => !reviewedIds.has(node.work.annictId));
-    if (next) {
-      return {
-        annictId: next.work.annictId,
-        globalId: next.work.id,
-        title: next.work.title,
+    for (const node of entries.nodes) {
+      if (reviewedIds.has(node.work.annictId)) continue;
+
+      remaining += 1;
+      next ??= {
+        annictId: node.work.annictId,
+        globalId: node.work.id,
+        title: node.work.title,
       };
     }
 
-    if (!entries.pageInfo.hasNextPage) return null;
+    if (!entries.pageInfo.hasNextPage) return { next, remaining };
     const nextCursor = entries.pageInfo.endCursor;
     if (!nextCursor || nextCursor === after) {
       throw new Error("Annict library pagination returned an invalid cursor");

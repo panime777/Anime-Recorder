@@ -1,6 +1,7 @@
 import { findNextUnreviewedWork } from "@/lib/annict-user";
 import { auth, signIn } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import ToolNav from "@/app/components/ToolNav";
 import RateForm from "./RateForm";
 
 export default async function RatePage() {
@@ -8,7 +9,8 @@ export default async function RatePage() {
   if (!session?.user?.id) {
     return (
       <div className="page">
-        <h1>次に見た作品を採点</h1>
+        <ToolNav />
+        <h1>見た作品を採点</h1>
         <div className="card">
           <p>このページを使うにはログインが必要です。</p>
           <form action={async () => { "use server"; await signIn("annict", { redirectTo: "/rate" }); }}>
@@ -24,17 +26,23 @@ export default async function RatePage() {
     select: { accessToken: true },
   });
   if (!user) {
-    return <div className="page"><div className="card">ユーザー情報が見つかりません。再ログインしてください。</div></div>;
+    return (
+      <div className="page">
+        <ToolNav />
+        <div className="card">ユーザー情報が見つかりません。再ログインしてください。</div>
+      </div>
+    );
   }
 
-  let work;
+  let queue;
   try {
-    work = await findNextUnreviewedWork(session.user.id, user.accessToken);
+    queue = await findNextUnreviewedWork(session.user.id, user.accessToken);
   } catch (error) {
     console.error("Failed to load rating queue", error);
     return (
       <div className="page">
-        <h1>次に見た作品を採点</h1>
+        <ToolNav />
+        <h1>見た作品を採点</h1>
         <div className="card">Annictから視聴済み作品を取得できませんでした。時間をおいて再度お試しください。</div>
       </div>
     );
@@ -42,13 +50,15 @@ export default async function RatePage() {
 
   return (
     <div className="page">
-      <h1>次に見た作品を採点</h1>
+      <ToolNav />
+      <h1>見た作品を採点</h1>
       <p className="lede">Annictで視聴済みの作品を、1作品ずつ採点します。</p>
+      <p>残り {queue.remaining}件</p>
       <div className="card">
-        {work ? (
+        {queue.next ? (
           <>
-            <h2 className="work-title">{work.title}</h2>
-            <RateForm work={work} />
+            <h2 className="work-title">{queue.next.title}</h2>
+            <RateForm work={queue.next} />
           </>
         ) : (
           <p className="caught-up">全部採点済みです。おつかれさまでした！</p>

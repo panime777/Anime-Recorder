@@ -40,7 +40,7 @@ export default async function Home() {
       <div className="card">
         <ul className="tool-list">
           <li>
-            <a href="/rate">次に見た作品を採点</a>
+            <a href="/rate">見た作品を採点</a>
             <p>Annictで視聴済みの未採点作品を、1作品ずつ採点します。</p>
           </li>
           <li>
