@@ -13,7 +13,7 @@ exports.handler = async function(event, context) {
     };
   }
 
-  const url = `https://api.annict.com/v1/activities?access_token=${accessToken}&filter_username=${username}&sort_id=desc&fields=action,created_at,work.title,status.kind&per_page=50&page=${page}`;
+  const url = `https://api.annict.com/v1/activities?access_token=${accessToken}&filter_username=${username}&sort_id=desc&fields=action,created_at,work.id,work.title,status.kind&per_page=50&page=${page}`;
 
   try {
     const response = await fetch(url);

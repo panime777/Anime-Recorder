@@ -7,6 +7,7 @@
 - Annictユーザー名と期間(開始日〜終了日)を指定して、そのユーザーの視聴アクティビティを取得
 - ステータスが `watched`(視聴済み)のアクティビティのみを抽出し、作品タイトルの重複を除いて一覧表示
 - 取得結果をCSVファイルとしてダウンロード
+- 2人のAnnictユーザー名を指定して、お互いが視聴済み(`watched`)の作品の共通項を一覧表示・CSV出力([common_works.html](common_works.html))
 
 ## できないこと(現時点)
 
@@ -18,6 +19,7 @@
 | ファイル | 役割 |
 |---|---|
 | [watched_list.html](watched_list.html) | フロントエンド。ユーザー名・期間を入力してデータ取得、テーブル表示・CSV出力を行う |
+| [common_works.html](common_works.html) | フロントエンド。2人のユーザー名を入力し、お互いの視聴済み作品の共通項を表示・CSV出力する |
 | [netlify/functions/fetch-activities.js](netlify/functions/fetch-activities.js) | Netlify Functions(サーバーレス関数)。Annict APIをアクセストークン付きで呼び出すプロキシ。トークンをクライアント側に露出させないための中継役 |
 | [netlify.toml](netlify.toml) | Netlifyのビルド設定(公開ディレクトリ・Functionsディレクトリの指定) |
 | [watched_list.ipynb](watched_list.ipynb) | 同等の処理をPythonで行うプロトタイプ用Jupyter Notebook |

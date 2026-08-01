@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Annict 視聴済み作品 共通項チェッカー</title>
+    <style>
+        #loading-popup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <h1>2人の視聴済み作品 共通項チェッカー</h1>
+
+    <form id="data-form">
+        <label for="username1">Username 1:(@から始まるアルファベットです ※@は除く)</label><br>
+        <input type="text" id="username1" name="username1" required><br><br>
+
+        <label for="username2">Username 2:</label><br>
+        <input type="text" id="username2" name="username2" required><br><br>
+
+        <button type="button" id="fetch-data">Compare</button>
+        <button type="button" id="download-csv">Download CSV</button>
+        <button type="button" id="clear-data">Clear Data</button>
+    </form>
+
+    <div id="loading-popup">実行中です...</div>
+
+    <h2>Results</h2>
+    <p>Common Count: <span id="total-count">0</span></p>
+    <table border="1" id="results-table">
+        <thead>
+            <tr>
+                <th>Work Title</th>
+            </tr>
+        </thead>
+        <tbody>
+        </tbody>
+    </table>
+
+    <script>
+        // 指定ユーザーの視聴済み(watched)作品を Map<workId, title> で全件取得する
+        async function fetchWatchedWorks(username) {
+            const watched = new Map();
+            let page = 1;
+
+            while (true) {
+                const url = `/.netlify/functions/fetch-activities?username=${username}&page=${page}`;
+                const response = await fetch(url);
+
+                if (!response.ok) {
+                    throw new Error(`Error fetching ${username}: ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (!data.activities || data.activities.length === 0) {
+                    break;
+                }
+
+                for (const activity of data.activities) {
+                    if (activity.action === "create_status" && activity.status.kind === "watched") {
+                        watched.set(activity.work.id, activity.work.title);
+                    }
+                }
+
+                page++;
+                await new Promise(resolve => setTimeout(resolve, 1000)); // 1秒の待機(レートリミット対策)
+            }
+
+            return watched;
+        }
+
+        document.getElementById("fetch-data").addEventListener("click", async function() {
+            const username1 = document.getElementById("username1").value;
+            const username2 = document.getElementById("username2").value;
+
+            const resultsTable = document.getElementById("results-table").querySelector("tbody");
+            const totalCountEl = document.getElementById("total-count");
+            const loadingPopup = document.getElementById("loading-popup");
+
+            resultsTable.innerHTML = ""; // テーブルのリセット
+            totalCountEl.textContent = "0"; // カウントのリセット
+
+            loadingPopup.style.display = "block"; // 実行中モーダルを表示
+
+            try {
+                const [watched1, watched2] = await Promise.all([
+                    fetchWatchedWorks(username1),
+                    fetchWatchedWorks(username2),
+                ]);
+
+                const commonTitles = [];
+                for (const [workId, title] of watched1) {
+                    if (watched2.has(workId)) {
+                        commonTitles.push(title);
+                    }
+                }
+                commonTitles.sort((a, b) => a.localeCompare(b, "ja"));
+
+                for (const title of commonTitles) {
+                    const row = document.createElement("tr");
+                    const titleCell = document.createElement("td");
+                    titleCell.textContent = title;
+                    row.appendChild(titleCell);
+                    resultsTable.appendChild(row);
+                }
+
+                totalCountEl.textContent = commonTitles.length;
+            } catch (error) {
+                console.error("Error fetching data:", error);
+                alert("データ取得中にエラーが発生しました");
+            } finally {
+                loadingPopup.style.display = "none"; // 実行中モーダルを非表示
+            }
+        });
+
+        document.getElementById("download-csv").addEventListener("click", function() {
+            const rows = [["Work Title"]];
+            const resultsTable = document.getElementById("results-table").querySelector("tbody").children;
+
+            for (const row of resultsTable) {
+                const cells = row.children;
+                rows.push([cells[0].textContent]);
+            }
+
+            const csvContent = rows.map(e => e.join(",")).join("\n");
+            const bom = "﻿"; // BOMを追加
+            const blob = new Blob([bom + csvContent], { type: "text/csv;charset=utf-8;" });
+            const link = document.createElement("a");
+
+            link.href = URL.createObjectURL(blob);
+            link.download = "common_works.csv";
+            link.style.display = "none";
+
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+
+        document.getElementById("clear-data").addEventListener("click", function() {
+            const resultsTable = document.getElementById("results-table").querySelector("tbody");
+            const totalCountEl = document.getElementById("total-count");
+
+            resultsTable.innerHTML = ""; // テーブルをリセット
+            totalCountEl.textContent = "0"; // カウントをリセット
+
+            alert("データがクリアされました！");
+        });
+    </script>
+</body>
+</html>
