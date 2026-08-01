@@ -7,16 +7,15 @@ const WATCHED_WORKS_QUERY = `
     viewer {
       libraryEntries(states: [WATCHED], first: 50, after: $after) {
         pageInfo { hasNextPage endCursor }
-        nodes { work { id annictId title } }
+        nodes {
+          work {
+            id
+            annictId
+            title
+            image { recommendedImageUrl }
+          }
+        }
       }
-    }
-  }
-`;
-
-const UPDATE_STATUS_MUTATION = `
-  mutation($workId: ID!, $state: StatusState!) {
-    updateStatus(input: { workId: $workId, state: $state }) {
-      work { id annictId title }
     }
   }
 `;
@@ -25,6 +24,7 @@ export interface QueuedWork {
   annictId: number;
   globalId: string;
   title: string;
+  imageUrl: string | null;
 }
 
 export interface RatingQueue {
@@ -37,15 +37,17 @@ interface LibraryResponse {
     viewer?: {
       libraryEntries: {
         pageInfo: { hasNextPage: boolean; endCursor: string | null };
-        nodes: Array<{ work: { id: string; annictId: number; title: string } }>;
+        nodes: Array<{
+          work: {
+            id: string;
+            annictId: number;
+            title: string;
+            image: { recommendedImageUrl: string | null } | null;
+          };
+        }>;
       };
     } | null;
   };
-  errors?: Array<{ message?: string }>;
-}
-
-interface MutationResponse {
-  data?: { updateStatus?: { work: { id: string } | null } | null };
   errors?: Array<{ message?: string }>;
 }
 
@@ -106,6 +108,7 @@ export async function findNextUnreviewedWork(
         annictId: node.work.annictId,
         globalId: node.work.id,
         title: node.work.title,
+        imageUrl: node.work.image?.recommendedImageUrl ?? null,
       };
     }
 
@@ -115,19 +118,5 @@ export async function findNextUnreviewedWork(
       throw new Error("Annict library pagination returned an invalid cursor");
     }
     after = nextCursor;
-  }
-}
-
-export async function markWorkWatched(accessToken: string, globalId: string): Promise<void> {
-  const result = await annictRequest<MutationResponse>(accessToken, UPDATE_STATUS_MUTATION, {
-    workId: globalId,
-    state: "WATCHED",
-  });
-  if (result.errors?.length) {
-    const details = result.errors.map((error) => error.message).filter(Boolean).join(", ");
-    throw new Error(`Annict status update failed${details ? `: ${details}` : ""}`);
-  }
-  if (!result.data?.updateStatus?.work) {
-    throw new Error("Annict status update returned no work");
   }
 }

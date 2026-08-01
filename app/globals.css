@@ -305,3 +305,62 @@ button:disabled {
   color: var(--color-text-muted);
   margin: 1rem 0 0;
 }
+
+.review-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 1.5rem 1rem;
+}
+
+.review-grid-item {
+  min-width: 0;
+}
+
+.review-cover-frame {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 2 / 3;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  box-shadow: var(--shadow-card);
+}
+
+.review-cover,
+.review-cover-placeholder {
+  width: 100%;
+  height: 100%;
+}
+
+.review-cover {
+  display: block;
+  object-fit: cover;
+}
+
+.review-cover-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.review-title {
+  margin: 0.65rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.review-score {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
+  box-shadow: var(--shadow-card);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
