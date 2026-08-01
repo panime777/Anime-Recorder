@@ -37,6 +37,24 @@ const WATCHED_WORKS_WITHOUT_IMAGES_QUERY = `
   }
 `;
 
+const WORK_IMAGE_QUERY = `
+  query($annictIds: [Int!]) {
+    searchWorks(annictIds: $annictIds) {
+      nodes {
+        image { recommendedImageUrl facebookOgImageUrl }
+      }
+    }
+  }
+`;
+
+// recommendedImageUrl isn't set for every work; fall back to the
+// (near-universally present) OGP image so fewer works end up with no
+// cover at all. Both are the work's official-site banner art, so the
+// two stay visually consistent when mixed in the same grid.
+function pickImageUrl(image?: { recommendedImageUrl: string | null; facebookOgImageUrl: string | null } | null) {
+  return image?.recommendedImageUrl || image?.facebookOgImageUrl || null;
+}
+
 export interface QueuedWork {
   annictId: number;
   globalId: string;
@@ -124,11 +142,7 @@ export async function findUnreviewedWorks(
         annictId: node.work.annictId,
         globalId: node.work.id,
         title: node.work.title,
-        // recommendedImageUrl isn't set for every work; fall back to the
-        // (near-universally present) OGP image so fewer works end up with
-        // no cover at all. Both are the work's official-site banner art,
-        // so the two stay visually consistent when mixed in the same grid.
-        imageUrl: node.work.image?.recommendedImageUrl || node.work.image?.facebookOgImageUrl || null,
+        imageUrl: pickImageUrl(node.work.image),
       });
     }
 
@@ -139,4 +153,28 @@ export async function findUnreviewedWorks(
     }
     after = nextCursor;
   }
+}
+
+interface WorkImageResponse {
+  data?: {
+    searchWorks?: {
+      nodes: Array<{
+        image?: { recommendedImageUrl: string | null; facebookOgImageUrl: string | null } | null;
+      }>;
+    } | null;
+  };
+  errors?: Array<{ message?: string }>;
+}
+
+// Looks up a single work's current image directly, instead of walking the
+// whole watched library. Used when editing an existing review, since the
+// image saved on our own Work row may predate this fallback logic (or be
+// stale for any other reason) and we want the edit to pick up the current
+// best-known image rather than just resaving whatever's already stored.
+export async function fetchWorkImage(accessToken: string, annictId: number): Promise<string | null> {
+  const result = await annictRequest<WorkImageResponse>(accessToken, WORK_IMAGE_QUERY, {
+    annictIds: [annictId],
+  });
+  if (result.errors?.length || !result.data?.searchWorks) return null;
+  return pickImageUrl(result.data.searchWorks.nodes[0]?.image);
 }
