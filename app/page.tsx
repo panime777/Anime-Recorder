@@ -1,26 +1,8 @@
 import { auth, signIn, signOut } from "@/lib/auth";
-import { findNextUnreviewedWork } from "@/lib/annict-user";
-import { prisma } from "@/lib/prisma";
+import RatingQueueCount from "@/app/components/RatingQueueCount";
 
 export default async function Home() {
   const session = await auth();
-  let remaining: number | null = null;
-
-  if (session?.user?.id) {
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { accessToken: true },
-    });
-
-    if (user) {
-      try {
-        const queue = await findNextUnreviewedWork(session.user.id, user.accessToken);
-        remaining = queue.remaining;
-      } catch (error) {
-        console.error("Failed to load rating queue", error);
-      }
-    }
-  }
 
   return (
     <div className="page">
@@ -60,7 +42,7 @@ export default async function Home() {
         <ul className="tool-list">
           <li>
             <a href="/rate">見た作品を採点</a>
-            {remaining !== null && <p>残り {remaining}件</p>}
+            {session?.user?.id && <RatingQueueCount />}
             <p>Annictで視聴済みの未採点作品を、1作品ずつ採点します。</p>
           </li>
           <li>
