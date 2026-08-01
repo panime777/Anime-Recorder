@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import ToolNav from "@/app/components/ToolNav";
+import { createCsv } from "@/lib/csv";
 
 const RETRY_DELAYS_MS = [2000, 5000, 10000, 20000, 40000];
 
@@ -17,6 +18,19 @@ interface ActivityData {
 interface ResultRow {
   createdAt: string;
   title: string;
+}
+
+function parseLocalDate(value: string, endOfDay = false): Date {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(
+    year,
+    month - 1,
+    day,
+    endOfDay ? 23 : 0,
+    endOfDay ? 59 : 0,
+    endOfDay ? 59 : 0,
+    endOfDay ? 999 : 0,
+  );
 }
 
 // Annict側のレートリミット等、一時的な5xxエラーは間隔を広げながらリトライする。
@@ -56,9 +70,8 @@ export default function WatchedListPage() {
   const [progress, setProgress] = useState("");
 
   async function handleFetch() {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    end.setHours(23, 59, 59);
+    const start = parseLocalDate(startDate);
+    const end = parseLocalDate(endDate, true);
 
     let page = 1;
     let flag = false;
@@ -119,7 +132,7 @@ export default function WatchedListPage() {
 
   function handleDownloadCsv() {
     const rows = [["Created At", "Work Title"], ...results.map((r) => [r.createdAt, r.title])];
-    const csvContent = rows.map((r) => r.join(",")).join("\n");
+    const csvContent = createCsv(rows);
     const bom = "﻿";
     const blob = new Blob([bom + csvContent], { type: "text/csv;charset=utf-8;" });
     const link = document.createElement("a");

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import ToolNav from "@/app/components/ToolNav";
+import { createCsv } from "@/lib/csv";
 
 const STATUS_LABELS = {
   WANNA_WATCH: "見たい",
@@ -14,10 +15,16 @@ const STATUS_LABELS = {
 type Status = keyof typeof STATUS_LABELS;
 
 const RETRY_DELAYS_MS = [2000, 5000, 10000, 20000, 40000];
+const MAX_PAGES = 500;
 
 interface LibraryEntriesData {
   nodes: Array<{ work: { annictId: number; title: string } }>;
   pageInfo: { hasNextPage: boolean; endCursor: string | null };
+}
+
+interface WorksResult {
+  works: Map<number, string>;
+  partial: boolean;
 }
 
 async function fetchLibraryPageWithRetry(
@@ -54,7 +61,7 @@ async function fetchWorksByStatus(
   username: string,
   state: Status,
   setProgress: (text: string) => void,
-): Promise<Map<number, string>> {
+): Promise<WorksResult> {
   const works = new Map<number, string>();
   let after: string | null = null;
   let page = 0;
@@ -70,17 +77,24 @@ async function fetchWorksByStatus(
       setProgress(
         `${username}(${label}): ${page}ページ目で取得を打ち切りました(${works.size}件のデータで集計します)。原因: ${(error as Error).message}`,
       );
-      return works;
+      return { works, partial: true };
     }
 
     for (const node of data.nodes) works.set(node.work.annictId, node.work.title);
     if (!data.pageInfo.hasNextPage) break;
-    after = data.pageInfo.endCursor;
+    const nextCursor = data.pageInfo.endCursor;
+    if (!nextCursor || nextCursor === after || page >= MAX_PAGES) {
+      setProgress(
+        `${username}(${label}): ページ情報が不正なため取得を打ち切りました(${works.size}件のデータで集計します)`,
+      );
+      return { works, partial: true };
+    }
+    after = nextCursor;
     await new Promise((resolve) => setTimeout(resolve, 300));
   }
 
   setProgress(`${username}(${label}): 完了(${works.size}件)`);
-  return works;
+  return { works, partial: false };
 }
 
 export default function CommonWorksPage() {
@@ -92,22 +106,25 @@ export default function CommonWorksPage() {
   const [progress1, setProgress1] = useState("");
   const [progress2, setProgress2] = useState("");
   const [loading, setLoading] = useState(false);
+  const [partial, setPartial] = useState(false);
 
   async function handleFetch() {
     setResults([]);
     setProgress1("");
     setProgress2("");
+    setPartial(false);
     setLoading(true);
     try {
-      const [works1, works2] = await Promise.all([
+      const [result1, result2] = await Promise.all([
         fetchWorksByStatus(username1, status1, setProgress1),
         fetchWorksByStatus(username2, status2, setProgress2),
       ]);
-      const commonTitles = [...works1]
-        .filter(([workId]) => works2.has(workId))
+      const commonTitles = [...result1.works]
+        .filter(([workId]) => result2.works.has(workId))
         .map(([, title]) => title)
         .sort((a, b) => a.localeCompare(b, "ja"));
       setResults(commonTitles);
+      setPartial(result1.partial || result2.partial);
     } catch (error) {
       console.error("Error fetching data:", error);
       alert((error as Error).message || "データ取得中にエラーが発生しました");
@@ -120,7 +137,7 @@ export default function CommonWorksPage() {
 
   function handleDownloadCsv() {
     const rows = [["Work Title"], ...results.map((title) => [title])];
-    const blob = new Blob(["﻿" + rows.map((row) => row.join(",")).join("\n")], {
+    const blob = new Blob(["﻿" + createCsv(rows)], {
       type: "text/csv;charset=utf-8;",
     });
     const link = document.createElement("a");
@@ -136,6 +153,7 @@ export default function CommonWorksPage() {
     setResults([]);
     setProgress1("");
     setProgress2("");
+    setPartial(false);
     alert("データがクリアされました！");
   }
 
@@ -185,6 +203,11 @@ export default function CommonWorksPage() {
           <h2>Results</h2>
           <span className="count">Common: <strong>{results.length}</strong></span>
         </div>
+        {partial && (
+          <p className="progress" role="alert">
+            警告: 一部のデータを取得できなかったため、比較結果が不完全な可能性があります。
+          </p>
+        )}
         <p className="progress">{progress1}</p>
         <p className="progress">{progress2}</p>
         <table>

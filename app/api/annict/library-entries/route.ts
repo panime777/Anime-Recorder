@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
 
 const VALID_STATES = ["WANNA_WATCH", "WATCHING", "WATCHED", "ON_HOLD", "STOP_WATCHING"];
 const QUERY = `
@@ -18,7 +19,12 @@ interface AnnictGraphqlResult {
 }
 
 export async function GET(request: NextRequest) {
-  const username = request.nextUrl.searchParams.get("username");
+  const session = await auth();
+  if (!session) {
+    return NextResponse.json({ error: "ログインが必要です" }, { status: 401 });
+  }
+
+  const username = request.nextUrl.searchParams.get("username")?.trim();
   const states = request.nextUrl.searchParams.get("states");
   const after = request.nextUrl.searchParams.get("after");
   const accessToken = process.env.ANNICT_TOKEN;
@@ -37,7 +43,7 @@ export async function GET(request: NextRequest) {
   try {
     const response = await fetch("https://api.annict.com/graphql", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `bearer ${accessToken}` },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
       body: JSON.stringify({
         query: QUERY,
         variables: { username, states: stateList.length ? stateList : null, after: after || null },
@@ -45,8 +51,12 @@ export async function GET(request: NextRequest) {
     });
     const result = (await response.json()) as AnnictGraphqlResult;
     if (!response.ok || result.errors) {
+      console.error("Annict GraphQL request failed", {
+        status: response.status,
+        errors: result.errors,
+      });
       return NextResponse.json(
-        { error: "Failed to fetch data", details: result.errors },
+        { error: "Failed to fetch data" },
         { status: response.ok ? 502 : response.status },
       );
     }
