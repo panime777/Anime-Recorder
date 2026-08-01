@@ -20,6 +20,23 @@ const WATCHED_WORKS_QUERY = `
   }
 `;
 
+const WATCHED_WORKS_WITHOUT_IMAGES_QUERY = `
+  query($after: String) {
+    viewer {
+      libraryEntries(states: [WATCHED], first: 50, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          work {
+            id
+            annictId
+            title
+          }
+        }
+      }
+    }
+  }
+`;
+
 export interface QueuedWork {
   annictId: number;
   globalId: string;
@@ -42,7 +59,7 @@ interface LibraryResponse {
             id: string;
             annictId: number;
             title: string;
-            image: { recommendedImageUrl: string | null } | null;
+            image?: { recommendedImageUrl: string | null } | null;
           };
         }>;
       };
@@ -76,6 +93,7 @@ async function annictRequest<T>(accessToken: string, query: string, variables: o
 export async function findNextUnreviewedWork(
   userId: string,
   accessToken: string,
+  includeNextImage = true,
 ): Promise<RatingQueue> {
   const reviews = await prisma.review.findMany({
     where: { userId },
@@ -89,7 +107,7 @@ export async function findNextUnreviewedWork(
   while (true) {
     const result: LibraryResponse = await annictRequest<LibraryResponse>(
       accessToken,
-      WATCHED_WORKS_QUERY,
+      includeNextImage ? WATCHED_WORKS_QUERY : WATCHED_WORKS_WITHOUT_IMAGES_QUERY,
       { after },
     );
     if (result.errors?.length) {
