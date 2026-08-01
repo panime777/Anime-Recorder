@@ -316,6 +316,15 @@ button:disabled {
   min-width: 0;
 }
 
+.review-grid-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.review-grid-link:hover .review-title {
+  text-decoration: underline;
+}
+
 .review-cover-frame {
   position: relative;
   overflow: hidden;

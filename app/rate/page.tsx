@@ -1,8 +1,8 @@
-import { findNextUnreviewedWork } from "@/lib/annict-user";
+import { findUnreviewedWorks } from "@/lib/annict-user";
 import { auth, signIn } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import ToolNav from "@/app/components/ToolNav";
-import RateForm from "./RateForm";
+import RatingQueue from "./RatingQueue";
 
 export default async function RatePage() {
   const session = await auth();
@@ -36,7 +36,7 @@ export default async function RatePage() {
 
   let queue;
   try {
-    queue = await findNextUnreviewedWork(session.user.id, user.accessToken);
+    queue = await findUnreviewedWorks(session.user.id, user.accessToken);
   } catch (error) {
     console.error("Failed to load rating queue", error);
     return (
@@ -53,17 +53,7 @@ export default async function RatePage() {
       <ToolNav />
       <h1>見た作品を採点</h1>
       <p className="lede">Annictで視聴済みの作品を、1作品ずつ採点します。</p>
-      <p>残り {queue.remaining}件</p>
-      <div className="card">
-        {queue.next ? (
-          <>
-            <h2 className="work-title">{queue.next.title}</h2>
-            <RateForm work={queue.next} />
-          </>
-        ) : (
-          <p className="caught-up">全部採点済みです。おつかれさまでした！</p>
-        )}
-      </div>
+      <RatingQueue items={queue.items} />
     </div>
   );
 }

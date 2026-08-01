@@ -45,7 +45,7 @@ export interface QueuedWork {
 }
 
 export interface RatingQueue {
-  next: QueuedWork | null;
+  items: QueuedWork[];
   remaining: number;
 }
 
@@ -90,10 +90,10 @@ async function annictRequest<T>(accessToken: string, query: string, variables: o
   }
 }
 
-export async function findNextUnreviewedWork(
+export async function findUnreviewedWorks(
   userId: string,
   accessToken: string,
-  includeNextImage = true,
+  includeImages = true,
 ): Promise<RatingQueue> {
   const reviews = await prisma.review.findMany({
     where: { userId },
@@ -101,13 +101,12 @@ export async function findNextUnreviewedWork(
   });
   const reviewedIds = new Set(reviews.map((review) => review.work.annictId));
   let after: string | null = null;
-  let next: QueuedWork | null = null;
-  let remaining = 0;
+  const items: QueuedWork[] = [];
 
   while (true) {
     const result: LibraryResponse = await annictRequest<LibraryResponse>(
       accessToken,
-      includeNextImage ? WATCHED_WORKS_QUERY : WATCHED_WORKS_WITHOUT_IMAGES_QUERY,
+      includeImages ? WATCHED_WORKS_QUERY : WATCHED_WORKS_WITHOUT_IMAGES_QUERY,
       { after },
     );
     if (result.errors?.length) {
@@ -121,16 +120,15 @@ export async function findNextUnreviewedWork(
     for (const node of entries.nodes) {
       if (reviewedIds.has(node.work.annictId)) continue;
 
-      remaining += 1;
-      next ??= {
+      items.push({
         annictId: node.work.annictId,
         globalId: node.work.id,
         title: node.work.title,
         imageUrl: node.work.image?.recommendedImageUrl ?? null,
-      };
+      });
     }
 
-    if (!entries.pageInfo.hasNextPage) return { next, remaining };
+    if (!entries.pageInfo.hasNextPage) return { items, remaining: items.length };
     const nextCursor = entries.pageInfo.endCursor;
     if (!nextCursor || nextCursor === after) {
       throw new Error("Annict library pagination returned an invalid cursor");
