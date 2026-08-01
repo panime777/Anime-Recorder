@@ -1,2 +1,17 @@
 # Local Netlify folder
 .netlify
+deno.lock
+
+# Dependencies
+node_modules
+
+# Next.js build output
+.next
+next-env.d.ts
+
+# Generated Prisma client
+generated
+
+# Environment variables
+.env
+.env*.local
