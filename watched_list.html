@@ -4,55 +4,87 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Annict API Fetcher</title>
-    <style>
-        #loading-popup {
-            display: none;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 20px;
-            border-radius: 10px;
-            z-index: 1000;
-        }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>Annict 活動データ取得ツール</h1>
+    <div class="page">
+        <nav class="tool-nav">
+            <a href="index.html">トップ</a>
+            <a href="watched_list.html" class="active">視聴済みリスト</a>
+            <a href="common_works.html">共通項チェッカー</a>
+        </nav>
 
-    <form id="data-form">
-        <label for="username">Username:(@から始まるアルファベットです ※@は除く)</label><br>
-        <input type="text" id="username" name="username" required><br><br>
+        <h1>Annict 活動データ取得ツール</h1>
+        <p class="lede">ユーザー名と期間を指定して、視聴済み(watched)の作品一覧を取得します。</p>
 
-        <label for="start_date">Start Date (YYYY-MM-DD):</label>
-        <input type="date" id="start_date" name="start_date" required><br><br>
+        <div class="card">
+            <form id="data-form">
+                <div class="field">
+                    <label for="username">Username <span class="hint">(@から始まるアルファベットです ※@は除く)</span></label>
+                    <input type="text" id="username" name="username" required>
+                </div>
 
-        <label for="end_date">End Date (YYYY-MM-DD):</label>
-        <input type="date" id="end_date" name="end_date" required><br><br>
+                <div class="field">
+                    <label for="start_date">Start Date</label>
+                    <input type="date" id="start_date" name="start_date" required>
+                </div>
 
-        <button type="button" id="fetch-data">Fetch Data</button>
-        <button type="button" id="download-csv">Download CSV</button>
-        <button type="button" id="clear-data">Clear Data</button>
-    </form>
+                <div class="field">
+                    <label for="end_date">End Date</label>
+                    <input type="date" id="end_date" name="end_date" required>
+                </div>
 
-    <div id="loading-popup">実行中です...</div>
+                <div class="actions">
+                    <button type="button" id="fetch-data" class="primary">Fetch Data</button>
+                    <button type="button" id="download-csv" class="secondary">Download CSV</button>
+                    <button type="button" id="clear-data" class="secondary">Clear Data</button>
+                </div>
+            </form>
+        </div>
 
-    <h2>Results</h2>
-    <p>Total Count: <span id="total-count">0</span></p>
-    <table border="1" id="results-table">
-        <thead>
-            <tr>
-                <th>Created At</th>
-                <th>Work Title</th>
-            </tr>
-        </thead>
-        <tbody>
-        </tbody>
-    </table>
+        <div id="loading-popup">実行中です...</div>
+
+        <div class="card">
+            <div class="results-header">
+                <h2>Results</h2>
+                <span class="count">Total: <strong id="total-count">0</strong></span>
+            </div>
+            <p class="progress" id="progress-text"></p>
+            <table id="results-table">
+                <thead>
+                    <tr>
+                        <th>Created At</th>
+                        <th>Work Title</th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+    </div>
 
     <script>
+        // Annict側のレートリミット等、一時的な5xxエラーは間隔を広げながらリトライする。
+        // 4xx(ユーザー名間違いなど)はリトライしても解決しないので即座に失敗させる。
+        const RETRY_DELAYS_MS = [2000, 5000, 10000, 20000, 40000];
+
+        async function fetchPageWithRetry(url, username, progressEl) {
+            for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+                const response = await fetch(url);
+                if (response.ok) {
+                    return await response.json();
+                }
+                if (response.status < 500) {
+                    throw new Error(`${username} のデータ取得に失敗しました (status ${response.status})`);
+                }
+                if (attempt === RETRY_DELAYS_MS.length) {
+                    throw new Error(`${username} のデータ取得に失敗しました (status ${response.status})。Annict側が混雑している可能性があります。しばらく時間をおいて再度お試しください`);
+                }
+                progressEl.textContent = `${username}: 一時的なエラーのため ${Math.round(RETRY_DELAYS_MS[attempt] / 1000)}秒待ってリトライします...`;
+                await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS_MS[attempt]));
+            }
+        }
+
         document.getElementById("fetch-data").addEventListener("click", async function() {
             const username = document.getElementById("username").value;
             const startDate = new Date(document.getElementById("start_date").value);
@@ -62,6 +94,7 @@
             const resultsTable = document.getElementById("results-table").querySelector("tbody");
             const totalCountEl = document.getElementById("total-count");
             const loadingPopup = document.getElementById("loading-popup");
+            const progressText = document.getElementById("progress-text");
 
             let count = 0;
             let page = 1;
@@ -70,22 +103,16 @@
 
             resultsTable.innerHTML = ""; // テーブルのリセット
             totalCountEl.textContent = "0"; // カウントのリセット
+            progressText.textContent = "";
 
             loadingPopup.style.display = "block"; // 実行中モーダルを表示
 
             while (!flag) {
+                progressText.textContent = `${username} のデータを取得中... (${page}ページ目)`;
                 const url = `/.netlify/functions/fetch-activities?username=${username}&start_date=${startDate.toISOString()}&end_date=${endDate.toISOString()}&page=${page}`;
 
                 try {
-                    const response = await fetch(url);
-
-                    if (!response.ok) {
-                        alert(`Error: ${response.status}`);
-                        loadingPopup.style.display = "none"; // 実行中モーダルを非表示
-                        return;
-                    }
-
-                    const data = await response.json();
+                    const data = await fetchPageWithRetry(url, username, progressText);
 
                     if (!data.activities || data.activities.length === 0) {
                         break;
@@ -122,16 +149,19 @@
                     }
 
                     page++;
-                    await new Promise(resolve => setTimeout(resolve, 1000)); // 1秒の待機
+                    await new Promise(resolve => setTimeout(resolve, 500)); // 待機(レートリミット対策)
                 } catch (error) {
                     console.error("Error fetching data:", error);
-                    alert("データ取得中にエラーが発生しました");
+                    // ここまで取得できた分だけで結果を出す(全体を失敗させない)
+                    totalCountEl.textContent = count;
+                    progressText.textContent = `${page}ページ目で取得を打ち切りました(ここまでの${count}件で集計しています)。原因: ${error.message}`;
                     loadingPopup.style.display = "none"; // 実行中モーダルを非表示
                     return;
                 }
             }
 
             totalCountEl.textContent = count;
+            progressText.textContent = "";
             loadingPopup.style.display = "none"; // 実行中モーダルを非表示
             alert("完了しました！");
         });
@@ -139,21 +169,21 @@
         document.getElementById("download-csv").addEventListener("click", function() {
             const rows = [["Created At", "Work Title"]];
             const resultsTable = document.getElementById("results-table").querySelector("tbody").children;
-        
+
             for (const row of resultsTable) {
                 const cells = row.children;
                 rows.push([cells[0].textContent, cells[1].textContent]);
             }
-        
+
             const csvContent = rows.map(e => e.join(",")).join("\n");
-            const bom = "\uFEFF"; // BOMを追加
+            const bom = "﻿"; // BOMを追加
             const blob = new Blob([bom + csvContent], { type: "text/csv;charset=utf-8;" });
             const link = document.createElement("a");
-        
+
             link.href = URL.createObjectURL(blob);
             link.download = "filtered_data.csv";
             link.style.display = "none";
-        
+
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);

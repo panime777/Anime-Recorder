@@ -4,13 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Anime-Recorder</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>Anime-Recorder</h1>
-    <p>Annictの視聴記録を扱うツール集です。</p>
-    <ul>
-        <li><a href="watched_list.html">視聴済み作品リスト取得</a></li>
-        <li><a href="common_works.html">2人の視聴済み作品 共通項チェッカー</a></li>
-    </ul>
+    <div class="page">
+        <h1>Anime-Recorder</h1>
+        <p class="lede">Annictの視聴記録を扱うツール集です。</p>
+
+        <div class="card">
+            <ul class="tool-list">
+                <li>
+                    <a href="watched_list.html">視聴済み作品リスト取得</a>
+                    <p>ユーザー名と期間を指定して、視聴済み作品の一覧をCSVで書き出します。</p>
+                </li>
+                <li>
+                    <a href="common_works.html">2人の視聴済み作品 共通項チェッカー</a>
+                    <p>2人のユーザー名を指定して、お互いが視聴済みの作品を一覧表示します。</p>
+                </li>
+            </ul>
+        </div>
+    </div>
 </body>
 </html>
