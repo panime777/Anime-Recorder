@@ -12,7 +12,7 @@ const WATCHED_WORKS_QUERY = `
             id
             annictId
             title
-            image { recommendedImageUrl }
+            image { recommendedImageUrl facebookOgImageUrl }
           }
         }
       }
@@ -59,7 +59,7 @@ interface LibraryResponse {
             id: string;
             annictId: number;
             title: string;
-            image?: { recommendedImageUrl: string | null } | null;
+            image?: { recommendedImageUrl: string | null; facebookOgImageUrl: string | null } | null;
           };
         }>;
       };
@@ -124,7 +124,11 @@ export async function findUnreviewedWorks(
         annictId: node.work.annictId,
         globalId: node.work.id,
         title: node.work.title,
-        imageUrl: node.work.image?.recommendedImageUrl ?? null,
+        // recommendedImageUrl isn't set for every work; fall back to the
+        // (near-universally present) OGP image so fewer works end up with
+        // no cover at all. Both are the work's official-site banner art,
+        // so the two stay visually consistent when mixed in the same grid.
+        imageUrl: node.work.image?.recommendedImageUrl || node.work.image?.facebookOgImageUrl || null,
       });
     }
 
