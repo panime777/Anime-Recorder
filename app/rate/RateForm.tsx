@@ -11,7 +11,7 @@ interface InitialValues {
 }
 
 interface RateFormProps {
-  work: Pick<QueuedWork, "annictId" | "title" | "imageUrl">;
+  work: Pick<QueuedWork, "annictId" | "title" | "imageUrl" | "seasonName" | "seasonYear">;
   initialValues?: InitialValues;
   redirectTo?: string;
   submitLabel?: string;

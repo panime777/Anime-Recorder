@@ -12,6 +12,8 @@ const WATCHED_WORKS_QUERY = `
             id
             annictId
             title
+            seasonName
+            seasonYear
             image { recommendedImageUrl facebookOgImageUrl }
           }
         }
@@ -30,6 +32,8 @@ const WATCHED_WORKS_WITHOUT_IMAGES_QUERY = `
             id
             annictId
             title
+            seasonName
+            seasonYear
           }
         }
       }
@@ -51,7 +55,12 @@ const WORK_IMAGE_QUERY = `
 // (near-universally present) OGP image so fewer works end up with no
 // cover at all. Both are the work's official-site banner art, so the
 // two stay visually consistent when mixed in the same grid.
-function pickImageUrl(image?: { recommendedImageUrl: string | null; facebookOgImageUrl: string | null } | null) {
+function pickImageUrl(
+  image?: {
+    recommendedImageUrl: string | null;
+    facebookOgImageUrl: string | null;
+  } | null,
+) {
   return image?.recommendedImageUrl || image?.facebookOgImageUrl || null;
 }
 
@@ -60,6 +69,8 @@ export interface QueuedWork {
   globalId: string;
   title: string;
   imageUrl: string | null;
+  seasonName: string | null;
+  seasonYear: number | null;
 }
 
 export interface RatingQueue {
@@ -77,7 +88,12 @@ interface LibraryResponse {
             id: string;
             annictId: number;
             title: string;
-            image?: { recommendedImageUrl: string | null; facebookOgImageUrl: string | null } | null;
+            seasonName: string | null;
+            seasonYear: number | null;
+            image?: {
+              recommendedImageUrl: string | null;
+              facebookOgImageUrl: string | null;
+            } | null;
           };
         }>;
       };
@@ -86,7 +102,11 @@ interface LibraryResponse {
   errors?: Array<{ message?: string }>;
 }
 
-async function annictRequest<T>(accessToken: string, query: string, variables: object): Promise<T> {
+async function annictRequest<T>(
+  accessToken: string,
+  query: string,
+  variables: object,
+): Promise<T> {
   const response = await fetch(ANNICT_GRAPHQL_URL, {
     method: "POST",
     headers: {
@@ -128,12 +148,18 @@ export async function findUnreviewedWorks(
       { after },
     );
     if (result.errors?.length) {
-      const details = result.errors.map((error) => error.message).filter(Boolean).join(", ");
-      throw new Error(`Annict library request failed${details ? `: ${details}` : ""}`);
+      const details = result.errors
+        .map((error) => error.message)
+        .filter(Boolean)
+        .join(", ");
+      throw new Error(
+        `Annict library request failed${details ? `: ${details}` : ""}`,
+      );
     }
 
     const entries = result.data?.viewer?.libraryEntries;
-    if (!entries) throw new Error("Annict library response did not include the viewer");
+    if (!entries)
+      throw new Error("Annict library response did not include the viewer");
 
     for (const node of entries.nodes) {
       if (reviewedIds.has(node.work.annictId)) continue;
@@ -143,10 +169,13 @@ export async function findUnreviewedWorks(
         globalId: node.work.id,
         title: node.work.title,
         imageUrl: pickImageUrl(node.work.image),
+        seasonName: node.work.seasonName,
+        seasonYear: node.work.seasonYear,
       });
     }
 
-    if (!entries.pageInfo.hasNextPage) return { items, remaining: items.length };
+    if (!entries.pageInfo.hasNextPage)
+      return { items, remaining: items.length };
     const nextCursor = entries.pageInfo.endCursor;
     if (!nextCursor || nextCursor === after) {
       throw new Error("Annict library pagination returned an invalid cursor");
@@ -155,11 +184,48 @@ export async function findUnreviewedWorks(
   }
 }
 
+interface FollowingResponse {
+  data?: {
+    viewer?: {
+      following: { nodes: Array<{ username: string; name: string | null }> };
+    } | null;
+  };
+  errors?: Array<{ message?: string }>;
+}
+
+const FOLLOWING_QUERY = `
+  query {
+    viewer {
+      following(first: 50) {
+        nodes { username name }
+      }
+    }
+  }
+`;
+
+export async function fetchFollowing(accessToken: string) {
+  const result = await annictRequest<FollowingResponse>(
+    accessToken,
+    FOLLOWING_QUERY,
+    {},
+  );
+  const nodes = result.data?.viewer?.following?.nodes;
+  if (result.errors?.length || !Array.isArray(nodes)) return [];
+  return nodes.filter(
+    (person): person is { username: string; name: string | null } =>
+      typeof person?.username === "string" &&
+      (typeof person.name === "string" || person.name === null),
+  );
+}
+
 interface WorkImageResponse {
   data?: {
     searchWorks?: {
       nodes: Array<{
-        image?: { recommendedImageUrl: string | null; facebookOgImageUrl: string | null } | null;
+        image?: {
+          recommendedImageUrl: string | null;
+          facebookOgImageUrl: string | null;
+        } | null;
       }>;
     } | null;
   };
@@ -171,10 +237,17 @@ interface WorkImageResponse {
 // image saved on our own Work row may predate this fallback logic (or be
 // stale for any other reason) and we want the edit to pick up the current
 // best-known image rather than just resaving whatever's already stored.
-export async function fetchWorkImage(accessToken: string, annictId: number): Promise<string | null> {
-  const result = await annictRequest<WorkImageResponse>(accessToken, WORK_IMAGE_QUERY, {
-    annictIds: [annictId],
-  });
+export async function fetchWorkImage(
+  accessToken: string,
+  annictId: number,
+): Promise<string | null> {
+  const result = await annictRequest<WorkImageResponse>(
+    accessToken,
+    WORK_IMAGE_QUERY,
+    {
+      annictIds: [annictId],
+    },
+  );
   if (result.errors?.length || !result.data?.searchWorks) return null;
   return pickImageUrl(result.data.searchWorks.nodes[0]?.image);
 }
