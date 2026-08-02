@@ -47,6 +47,31 @@ const WORK_IMAGE_QUERY = `
   }
 `;
 
+const LIBRARY_STATUS_COUNTS_QUERY = `
+  query {
+    viewer {
+      wannaWatchCount
+      watchingCount
+      watchedCount
+      onHoldCount
+      stopWatchingCount
+    }
+  }
+`;
+
+const WATCHED_SEASONS_QUERY = `
+  query($after: String) {
+    viewer {
+      libraryEntries(states: [WATCHED], first: 50, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes {
+          work { seasonName seasonYear }
+        }
+      }
+    }
+  }
+`;
+
 // recommendedImageUrl isn't set for every work; fall back to the
 // (near-universally present) OGP image so fewer works end up with no
 // cover at all. Both are the work's official-site banner art, so the
@@ -108,6 +133,91 @@ async function annictRequest<T>(accessToken: string, query: string, variables: o
   }
 }
 
+function throwGraphQLErrors(errors?: Array<{ message?: string }>) {
+  if (!errors?.length) return;
+  const details = errors.map((error) => error.message).filter(Boolean).join(", ");
+  throw new Error(`Annict request failed${details ? `: ${details}` : ""}`);
+}
+
+export interface LibraryStatusCounts {
+  wannaWatchCount: number;
+  watchingCount: number;
+  watchedCount: number;
+  onHoldCount: number;
+  stopWatchingCount: number;
+}
+
+interface LibraryStatusCountsResponse {
+  data?: { viewer?: LibraryStatusCounts | null };
+  errors?: Array<{ message?: string }>;
+}
+
+export async function fetchLibraryStatusCounts(accessToken: string): Promise<LibraryStatusCounts> {
+  const result = await annictRequest<LibraryStatusCountsResponse>(
+    accessToken,
+    LIBRARY_STATUS_COUNTS_QUERY,
+    {},
+  );
+  throwGraphQLErrors(result.errors);
+  if (!result.data?.viewer) throw new Error("Annict response did not include the viewer");
+  return result.data.viewer;
+}
+
+export interface WatchedSeasonCount {
+  seasonYear: number;
+  seasonName: string;
+  count: number;
+}
+
+interface WatchedSeasonsResponse {
+  data?: {
+    viewer?: {
+      libraryEntries: {
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        nodes: Array<{ work: { seasonName: string | null; seasonYear: number | null } }>;
+      };
+    } | null;
+  };
+  errors?: Array<{ message?: string }>;
+}
+
+export async function fetchWatchedSeasonCounts(accessToken: string): Promise<WatchedSeasonCount[]> {
+  let after: string | null = null;
+  const seenCursors = new Set<string>();
+  const counts = new Map<string, WatchedSeasonCount>();
+
+  while (true) {
+    const result: WatchedSeasonsResponse = await annictRequest<WatchedSeasonsResponse>(
+      accessToken,
+      WATCHED_SEASONS_QUERY,
+      { after },
+    );
+    throwGraphQLErrors(result.errors);
+    const entries = result.data?.viewer?.libraryEntries;
+    if (!entries) throw new Error("Annict library response did not include the viewer");
+
+    for (const { work } of entries.nodes) {
+      if (work.seasonYear == null || work.seasonName == null) continue;
+      const key = `${work.seasonYear}:${work.seasonName}`;
+      const current = counts.get(key);
+      if (current) current.count += 1;
+      else counts.set(key, { seasonYear: work.seasonYear, seasonName: work.seasonName, count: 1 });
+    }
+
+    if (!entries.pageInfo.hasNextPage) break;
+    const nextCursor = entries.pageInfo.endCursor;
+    if (!nextCursor || seenCursors.has(nextCursor)) {
+      throw new Error("Annict library pagination returned an invalid cursor");
+    }
+    seenCursors.add(nextCursor);
+    after = nextCursor;
+  }
+
+  return [...counts.values()].sort((a, b) =>
+    b.count - a.count || b.seasonYear - a.seasonYear || a.seasonName.localeCompare(b.seasonName),
+  );
+}
+
 export async function findUnreviewedWorks(
   userId: string,
   accessToken: string,
@@ -127,10 +237,7 @@ export async function findUnreviewedWorks(
       includeImages ? WATCHED_WORKS_QUERY : WATCHED_WORKS_WITHOUT_IMAGES_QUERY,
       { after },
     );
-    if (result.errors?.length) {
-      const details = result.errors.map((error) => error.message).filter(Boolean).join(", ");
-      throw new Error(`Annict library request failed${details ? `: ${details}` : ""}`);
-    }
+    throwGraphQLErrors(result.errors);
 
     const entries = result.data?.viewer?.libraryEntries;
     if (!entries) throw new Error("Annict library response did not include the viewer");
