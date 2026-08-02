@@ -50,6 +50,10 @@ export default async function Home() {
             <p>これまでに採点した作品と、スコア・タグ・コメントを確認します。</p>
           </li>
           <li>
+            <a href="/recommendations">おすすめ作品</a>
+            <p>部員の高評価と、あなたが好きなタグから次に見る作品をおすすめします。</p>
+          </li>
+          <li>
             <a href="/tools/watched-list">視聴済み作品リスト取得</a>
             <p>ユーザー名と期間を指定して、視聴済み作品の一覧をCSVで書き出します。</p>
           </li>
