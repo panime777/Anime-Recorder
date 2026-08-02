@@ -376,3 +376,15 @@ button:disabled {
   font-weight: 700;
   line-height: 1.4;
 }
+
+.recommendation-reason,
+.recommendation-tags {
+  margin: 0.3rem 0 0;
+  color: var(--color-text-muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.recommendation-tags {
+  overflow-wrap: anywhere;
+}
