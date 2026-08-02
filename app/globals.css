@@ -88,6 +88,7 @@ label .hint {
 input[type="text"],
 input[type="date"],
 input[type="number"],
+select,
 textarea {
   width: 100%;
   padding: 0.6rem 0.75rem;
@@ -101,6 +102,7 @@ textarea {
 input[type="text"]:focus,
 input[type="date"]:focus,
 input[type="number"]:focus,
+select:focus,
 textarea:focus {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
@@ -375,4 +377,33 @@ button:disabled {
   font-size: 0.75rem;
   font-weight: 700;
   line-height: 1.4;
+}
+
+.compatibility-selects {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.compatibility-selects .field {
+  margin-bottom: 0;
+}
+
+.compatibility-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 1.25rem 1rem;
+  margin-top: 1rem;
+}
+
+.compatibility-summary,
+.compatibility-empty {
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+@media (max-width: 520px) {
+  .compatibility-selects {
+    grid-template-columns: 1fr;
+  }
 }

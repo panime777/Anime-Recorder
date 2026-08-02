@@ -7,6 +7,7 @@ const LINKS = [
   { href: "/", label: "トップ" },
   { href: "/tools/watched-list", label: "視聴済みリスト" },
   { href: "/tools/common-works", label: "共通項チェッカー" },
+  { href: "/compatibility", label: "相性診断" },
 ];
 
 export default function ToolNav() {

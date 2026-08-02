@@ -50,6 +50,10 @@ export default async function Home() {
             <p>これまでに採点した作品と、スコア・タグ・コメントを確認します。</p>
           </li>
           <li>
+            <a href="/compatibility">メンバー相性診断</a>
+            <p>2人の採点データを比べて、好みの共通点とおすすめ作品を探します。</p>
+          </li>
+          <li>
             <a href="/tools/watched-list">視聴済み作品リスト取得</a>
             <p>ユーザー名と期間を指定して、視聴済み作品の一覧をCSVで書き出します。</p>
           </li>
