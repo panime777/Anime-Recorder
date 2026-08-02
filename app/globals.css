@@ -285,6 +285,41 @@ nav.tool-nav a:hover {
   font-size: 0.9rem;
 }
 
+.ranking-card h2 {
+  font-size: 1.15rem;
+  margin: 0;
+}
+
+.ranking-note,
+.ranking-empty {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+}
+
+.ranking-note {
+  margin: 0.25rem 0 1rem;
+}
+
+.ranking-empty {
+  margin: 1rem 0 0;
+}
+
+.ranking-table-wrap {
+  overflow-x: auto;
+  margin-top: 1rem;
+}
+
+.ranking-position {
+  width: 3.5rem;
+  font-weight: 600;
+  color: var(--color-accent);
+}
+
+.ranking-value {
+  text-align: right;
+  white-space: nowrap;
+}
+
 textarea {
   resize: vertical;
   font-family: inherit;
