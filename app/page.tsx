@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { auth, signIn, signOut } from "@/lib/auth";
 import RatingQueueCount from "@/app/components/RatingQueueCount";
 
@@ -41,28 +42,28 @@ export default async function Home() {
       <div className="card">
         <ul className="tool-list">
           <li>
-            <a href="/rate">見た作品を採点</a>
+            <Link href="/rate">見た作品を採点</Link>
             {session?.user?.id && <RatingQueueCount />}
             <p>Annictで視聴済みの未採点作品を、1作品ずつ採点します。</p>
           </li>
           <li>
-            <a href="/reviews">採点した作品</a>
+            <Link href="/reviews">採点した作品</Link>
             <p>これまでに採点した作品と、スコア・タグ・コメントを確認します。</p>
           </li>
           <li>
-            <a href="/ranking">クラブランキング</a>
+            <Link href="/ranking">クラブランキング</Link>
             <p>みんなの採点数や平均スコアをランキングで見られます。</p>
           </li>
           <li>
-            <a href="/groups">グループ管理</a>
+            <Link href="/groups">グループ管理</Link>
             <p>ランキングに使うグループを作り、メンバーを追加します。</p>
           </li>
           <li>
-            <a href="/tools/watched-list">視聴済み作品リスト取得</a>
+            <Link href="/tools/watched-list">視聴済み作品リスト取得</Link>
             <p>ユーザー名と期間を指定して、視聴済み作品の一覧をCSVで書き出します。</p>
           </li>
           <li>
-            <a href="/tools/common-works">2人の視聴済み作品 共通項チェッカー</a>
+            <Link href="/tools/common-works">2人の視聴済み作品 共通項チェッカー</Link>
             <p>2人のユーザー名を指定して、お互いが視聴済みの作品を一覧表示します。</p>
           </li>
         </ul>
