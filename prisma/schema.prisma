@@ -17,16 +17,39 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  reviews Review[]
+  reviews      Review[]
+  groupMembers GroupMember[]
 }
 
 model Work {
-  id       String  @id @default(cuid())
-  annictId Int     @unique
-  title    String
-  imageUrl String?
+  id         String  @id @default(cuid())
+  annictId   Int     @unique
+  title      String
+  imageUrl   String?
+  seasonName String?
+  seasonYear Int?
 
   reviews Review[]
+}
+
+model Group {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  members GroupMember[]
+}
+
+model GroupMember {
+  id       String   @id @default(cuid())
+  groupId  String
+  userId   String
+  joinedAt DateTime @default(now())
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
 }
 
 model Review {
