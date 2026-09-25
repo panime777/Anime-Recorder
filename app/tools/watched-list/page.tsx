@@ -3,34 +3,12 @@
 import { useState } from "react";
 import ToolNav from "@/app/components/ToolNav";
 import { createCsv } from "@/lib/csv";
+import { collectWatchedWorks, getDateRange, type Activity, type WatchedWork } from "@/lib/watched-list";
 
 const RETRY_DELAYS_MS = [2000, 5000, 10000, 20000, 40000];
 
 interface ActivityData {
-  activities: Array<{
-    action: string;
-    created_at: string;
-    work: { title: string };
-    status: { kind: string };
-  }>;
-}
-
-interface ResultRow {
-  createdAt: string;
-  title: string;
-}
-
-function parseLocalDate(value: string, endOfDay = false): Date {
-  const [year, month, day] = value.split("-").map(Number);
-  return new Date(
-    year,
-    month - 1,
-    day,
-    endOfDay ? 23 : 0,
-    endOfDay ? 59 : 0,
-    endOfDay ? 59 : 0,
-    endOfDay ? 999 : 0,
-  );
+  activities: Activity[];
 }
 
 // Annict側のレートリミット等、一時的な5xxエラーは間隔を広げながらリトライする。
@@ -65,69 +43,42 @@ export default function WatchedListPage() {
   const [username, setUsername] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [results, setResults] = useState<ResultRow[]>([]);
+  const [results, setResults] = useState<WatchedWork[]>([]);
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState("");
 
   async function handleFetch() {
-    const start = parseLocalDate(startDate);
-    const end = parseLocalDate(endDate, true);
-
+    if (loading) return;
     let page = 1;
-    let flag = false;
-    const uniqueTitles = new Set<string>();
-    const rows: ResultRow[] = [];
-
+    const works = new Map<number, WatchedWork>();
     setResults([]);
     setProgress("");
     setLoading(true);
 
-    while (!flag) {
-      setProgress(`${username} のデータを取得中... (${page}ページ目)`);
-      const url = `/api/annict/activities?username=${username}&start_date=${start.toISOString()}&end_date=${end.toISOString()}&page=${page}`;
+    try {
+      const { start, end } = getDateRange(startDate, endDate);
+      const name = username.trim();
+      if (!name) throw new Error("ユーザー名を入力してください");
+      while (true) {
+        setProgress(`${name} のデータを取得中... (${page}ページ目)`);
+        const params = new URLSearchParams({ username: name, page: String(page) });
+        const data = await fetchPageWithRetry(`/api/annict/activities?${params}`, name, setProgress);
+        if (!data.activities || data.activities.length === 0) break;
 
-      try {
-        const data = await fetchPageWithRetry(url, username, setProgress);
-
-        if (!data.activities || data.activities.length === 0) {
-          break;
-        }
-
-        for (const activity of data.activities) {
-          if (activity.action === "create_status" && activity.status.kind === "watched") {
-            const createdAt = new Date(activity.created_at);
-            if (createdAt >= start && createdAt <= end) {
-              if (!uniqueTitles.has(activity.work.title)) {
-                uniqueTitles.add(activity.work.title);
-                rows.push({ createdAt: activity.created_at, title: activity.work.title });
-              }
-            } else if (createdAt < start) {
-              flag = true;
-              break;
-            }
-          }
-        }
-
-        setResults([...rows]);
-
-        if (flag) {
-          break;
-        }
-
+        const reachedStart = collectWatchedWorks(data.activities, start, end, works);
+        setResults([...works.values()]);
+        if (reachedStart) break;
         page++;
         await new Promise((resolve) => setTimeout(resolve, 500));
-      } catch (error) {
-        setProgress(
-          `${page}ページ目で取得を打ち切りました(ここまでの${rows.length}件で集計しています)。原因: ${(error as Error).message}`,
-        );
-        setLoading(false);
-        return;
       }
+      setProgress("完了しました！");
+    } catch (error) {
+      setProgress(
+        `${page}ページ目で取得を打ち切りました(ここまでの${works.size}件で集計しています)。原因: ${error instanceof Error ? error.message : "データ取得に失敗しました"}`,
+      );
+    } finally {
+      setLoading(false);
     }
-
-    setProgress("");
-    setLoading(false);
-    alert("完了しました！");
   }
 
   function handleDownloadCsv() {
@@ -200,13 +151,13 @@ export default function WatchedListPage() {
           </div>
 
           <div className="actions">
-            <button type="submit" className="primary">
+            <button type="submit" className="primary" disabled={loading}>
               Fetch Data
             </button>
-            <button type="button" className="secondary" onClick={handleDownloadCsv}>
+            <button type="button" className="secondary" disabled={loading} onClick={handleDownloadCsv}>
               Download CSV
             </button>
-            <button type="button" className="secondary" onClick={handleClear}>
+            <button type="button" className="secondary" disabled={loading} onClick={handleClear}>
               Clear Data
             </button>
           </div>
@@ -231,8 +182,8 @@ export default function WatchedListPage() {
             </tr>
           </thead>
           <tbody>
-            {results.map((row, index) => (
-              <tr key={index}>
+            {results.map((row) => (
+              <tr key={row.id}>
                 <td>{row.createdAt}</td>
                 <td>{row.title}</td>
               </tr>

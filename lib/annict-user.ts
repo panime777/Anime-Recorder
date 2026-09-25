@@ -51,6 +51,61 @@ const WORK_IMAGE_QUERY = `
   }
 `;
 
+const WORK_QUERY = `
+  query($annictIds: [Int!]) {
+    searchWorks(annictIds: $annictIds, first: 1) {
+      nodes {
+        annictId title seasonName seasonYear
+        image { recommendedImageUrl facebookOgImageUrl }
+      }
+    }
+  }
+`;
+
+interface WorkResponse {
+  data?: {
+    searchWorks?: {
+      nodes: Array<{
+        annictId: number;
+        title: string;
+        seasonName: string | null;
+        seasonYear: number | null;
+        image: {
+          recommendedImageUrl: string | null;
+          facebookOgImageUrl: string | null;
+        } | null;
+      }>;
+    } | null;
+  };
+  errors?: Array<{ message?: string }>;
+}
+
+export async function fetchWork(accessToken: string, annictId: number) {
+  const result = await annictRequest<WorkResponse>(accessToken, WORK_QUERY, {
+    annictIds: [annictId],
+  });
+
+  if (result.errors?.length || !result.data?.searchWorks) {
+    throw new Error("Annict work request failed");
+  }
+  const work = result.data.searchWorks.nodes[0];
+  if (!work) return null;
+  if (
+    work.annictId !== annictId ||
+    typeof work.title !== "string" ||
+    !work.title.trim()
+  ) {
+    throw new Error("Annict returned an invalid work");
+  }
+  return {
+    annictId: work.annictId,
+    title: work.title,
+    imageUrl: pickImageUrl(work.image),
+    seasonName: work.seasonName,
+    seasonYear: work.seasonYear,
+  };
+}
+
 // recommendedImageUrl isn't set for every work; fall back to the
 // (near-universally present) OGP image so fewer works end up with no
 // cover at all. Both are the work's official-site banner art, so the
@@ -187,35 +242,56 @@ export async function findUnreviewedWorks(
 interface FollowingResponse {
   data?: {
     viewer?: {
-      following: { nodes: Array<{ username: string; name: string | null }> };
+      following: {
+        nodes: Array<{ username: string; name: string | null }>;
+        pageInfo: { hasNextPage: boolean; endCursor: string | null };
+      };
     } | null;
   };
   errors?: Array<{ message?: string }>;
 }
 
 const FOLLOWING_QUERY = `
-  query {
+  query($after: String) {
     viewer {
-      following(first: 50) {
+      following(first: 50, after: $after) {
         nodes { username name }
+        pageInfo { hasNextPage endCursor }
       }
     }
   }
 `;
 
 export async function fetchFollowing(accessToken: string) {
-  const result = await annictRequest<FollowingResponse>(
-    accessToken,
-    FOLLOWING_QUERY,
-    {},
-  );
-  const nodes = result.data?.viewer?.following?.nodes;
-  if (result.errors?.length || !Array.isArray(nodes)) return [];
-  return nodes.filter(
-    (person): person is { username: string; name: string | null } =>
-      typeof person?.username === "string" &&
-      (typeof person.name === "string" || person.name === null),
-  );
+  const people = new Map<string, { username: string; name: string | null }>();
+  const cursors = new Set<string>();
+  let after: string | null = null;
+  while (true) {
+    const result: FollowingResponse = await annictRequest<FollowingResponse>(
+      accessToken,
+      FOLLOWING_QUERY,
+      { after },
+    );
+    const following = result.data?.viewer?.following;
+    if (result.errors?.length || !following || !Array.isArray(following.nodes)) {
+      throw new Error("Annict following request failed");
+    }
+    for (const person of following.nodes) {
+      if (
+        typeof person?.username === "string" &&
+        (typeof person.name === "string" || person.name === null)
+      ) {
+        people.set(person.username, person);
+      }
+    }
+    if (!following.pageInfo.hasNextPage) return [...people.values()];
+    const cursor = following.pageInfo.endCursor;
+    if (!cursor || cursors.has(cursor)) {
+      throw new Error("Annict following pagination returned an invalid cursor");
+    }
+    cursors.add(cursor);
+    after = cursor;
+  }
 }
 
 interface WorkImageResponse {

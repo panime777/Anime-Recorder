@@ -42,7 +42,7 @@ export default function RateForm({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...work,
+          annictId: work.annictId,
           score,
           tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean),
           comment,
@@ -58,7 +58,10 @@ export default function RateForm({
       setTags("");
       setComment("");
       onSaved?.();
-      if (redirectTo) router.push(redirectTo);
+      if (redirectTo) {
+        router.push(redirectTo);
+        router.refresh();
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "保存に失敗しました");
     } finally {
